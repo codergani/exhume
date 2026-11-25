@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AutopsyAiError, AutopsySchemaError } from '../src/errors'
 import type { RepoVitals } from '../src/github/client'
 import type { DepRotReport } from '../src/github/deps'
+import type { ForkSummary } from '../src/lib/forks'
 
 // Mock firebase/app and firebase/ai before importing provider
 const mockInitializeApp = vi.fn(() => ({ name: 'exhume-ai' }))
@@ -158,7 +159,7 @@ describe('runAutopsy: behaviour', () => {
     mockGenerateContent.mockResolvedValue({ response: { text: () => JSON.stringify(validPayload) } })
     await runAutopsy(vitals, depRot)
     const sent = JSON.parse(mockGenerateContent.mock.calls[0][0])
-    expect(Object.keys(sent).sort()).toEqual(['deps', 'vitals'])
+    expect(Object.keys(sent).sort()).toEqual(['deps', 'forks', 'vitals'])
   })
 
   it('retries once on schema failure and succeeds on the second call', async () => {
@@ -346,5 +347,96 @@ describe('runAutopsy: transient failure backoff', () => {
       expect(spy).not.toHaveBeenCalled()
       spy.mockRestore()
     }
+  })
+})
+
+const forkSummary: ForkSummary = {
+  status: 'available',
+  livingCount: 2,
+  top: [
+    { owner: 'Alice', name: 'my-pkg', stars: 40, monthsSincePush: 2 },
+    { owner: 'bob', name: 'my-pkg-next', stars: 10, monthsSincePush: 5 },
+  ],
+}
+
+const replyWith = (recommendation?: unknown) => ({
+  response: {
+    text: () =>
+      JSON.stringify(recommendation === undefined ? validPayload : { ...validPayload, recommendation }),
+  },
+})
+
+describe('runAutopsy: fork summary and recommendation', () => {
+  it('sends the fork summary as given', async () => {
+    mockGenerateContent.mockResolvedValue(replyWith())
+    await runAutopsy(vitals, depRot, forkSummary)
+    const sent = JSON.parse(mockGenerateContent.mock.calls[0][0])
+    expect(sent.forks).toEqual(forkSummary)
+  })
+
+  it('defaults forks to unavailable when omitted', async () => {
+    mockGenerateContent.mockResolvedValue(replyWith())
+    await runAutopsy(vitals, depRot)
+    const sent = JSON.parse(mockGenerateContent.mock.calls[0][0])
+    expect(sent.forks).toEqual({ status: 'unavailable' })
+  })
+
+  it('sends only vitals, deps and forks, with no source-code-like fields', async () => {
+    mockGenerateContent.mockResolvedValue(replyWith())
+    await runAutopsy(vitals, depRot, forkSummary)
+    const raw = mockGenerateContent.mock.calls[0][0] as string
+    const sent = JSON.parse(raw)
+    expect(Object.keys(sent).sort()).toEqual(['deps', 'forks', 'vitals'])
+    for (const key of ['source', 'code', 'content', 'files', 'commits', 'message', 'readme']) {
+      expect(raw.toLowerCase()).not.toContain(`"${key}"`)
+    }
+  })
+
+  it('accepts a reply without recommendation and returns no recommendation key', async () => {
+    mockGenerateContent.mockResolvedValue(replyWith())
+    const report = await runAutopsy(vitals, depRot, forkSummary)
+    expect('recommendation' in report).toBe(false)
+  })
+
+  it('drops an adopt-fork recommendation naming a fork not in forks.top', async () => {
+    mockGenerateContent.mockResolvedValue(
+      replyWith({ kind: 'adopt-fork', fork: 'mallory/invented', reason: 'Looks active.' }),
+    )
+    const report = await runAutopsy(vitals, depRot, forkSummary)
+    expect('recommendation' in report).toBe(false)
+  })
+
+  it('drops an adopt-fork recommendation with no fork field', async () => {
+    mockGenerateContent.mockResolvedValue(replyWith({ kind: 'adopt-fork', reason: 'Looks active.' }))
+    const report = await runAutopsy(vitals, depRot, forkSummary)
+    expect('recommendation' in report).toBe(false)
+  })
+
+  it.each(['alice/my-pkg', 'ALICE/MY-PKG', 'Alice/My-Pkg', 'BOB/my-pkg-next'])(
+    'keeps an adopt-fork recommendation naming a listed fork (%s)',
+    async (fork) => {
+      const recommendation = { kind: 'adopt-fork', fork, reason: 'Most active.' }
+      mockGenerateContent.mockResolvedValue(replyWith(recommendation))
+      const report = await runAutopsy(vitals, depRot, forkSummary)
+      expect(report.recommendation).toEqual(recommendation)
+    },
+  )
+
+  it('keeps a revive-original recommendation', async () => {
+    const recommendation = { kind: 'revive-original', reason: 'Forks are thin.' }
+    mockGenerateContent.mockResolvedValue(replyWith(recommendation))
+    const report = await runAutopsy(vitals, depRot, forkSummary)
+    expect(report.recommendation).toEqual(recommendation)
+  })
+
+  it.each([
+    ['omitted', undefined],
+    ['unavailable', { status: 'unavailable' } as ForkSummary],
+  ])('drops an adopt-fork recommendation when forks are %s', async (_label, forks) => {
+    mockGenerateContent.mockResolvedValue(
+      replyWith({ kind: 'adopt-fork', fork: 'alice/my-pkg', reason: 'Most active.' }),
+    )
+    const report = await runAutopsy(vitals, depRot, forks)
+    expect('recommendation' in report).toBe(false)
   })
 })

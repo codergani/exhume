@@ -1,5 +1,6 @@
 ﻿import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { buildFallbackReport } from '../src/ai/fallback'
+import type { ForkSummary } from '../src/lib/forks'
 import type { RepoVitals } from '../src/github/client'
 import type { DepRotReport } from '../src/github/deps'
 
@@ -126,5 +127,43 @@ describe('buildFallbackReport', () => {
   it('generatedAt is a valid ISO string', () => {
     const r = buildFallbackReport(vitals(10), depRotSkipped)
     expect(() => new Date(r.generatedAt).toISOString()).not.toThrow()
+  })
+})
+
+describe('buildFallbackReport with fork summary', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2025-01-01T00:00:00Z'))
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  const withFork: ForkSummary = {
+    status: 'available',
+    livingCount: 1,
+    top: [{ owner: 'alice', name: 'phoenix', stars: 120, monthsSincePush: 3 }],
+  }
+
+  it('is identical to the 2-argument result when forks are absent or empty', () => {
+    const base = buildFallbackReport(vitals(30), depRotWithOutdated)
+    const empty: ForkSummary = { status: 'available', livingCount: 0, top: [] }
+    expect(buildFallbackReport(vitals(30), depRotWithOutdated, undefined)).toEqual(base)
+    expect(buildFallbackReport(vitals(30), depRotWithOutdated, { status: 'unavailable' })).toEqual(base)
+    expect(buildFallbackReport(vitals(30), depRotWithOutdated, empty)).toEqual(base)
+  })
+
+  it('names the top fork in step 3 and keeps steps 1 and 2', () => {
+    const base = buildFallbackReport(vitals(30), depRotWithOutdated)
+    const r = buildFallbackReport(vitals(30), depRotWithOutdated, withFork)
+    const text = r.steps.map((s) => `${s.action} ${s.rationale}`).join(' ')
+    expect(text).toContain('alice/phoenix')
+    expect(r.steps).toHaveLength(3)
+    expect(r.steps.map((s) => s.order)).toEqual([1, 2, 3])
+    expect(r.steps[0]).toEqual(base.steps[0])
+    expect(r.steps[1]).toEqual(base.steps[1])
+  })
+
+  it('never includes a recommendation property', () => {
+    expect('recommendation' in buildFallbackReport(vitals(30), depRotSkipped)).toBe(false)
+    expect('recommendation' in buildFallbackReport(vitals(30), depRotSkipped, withFork)).toBe(false)
   })
 })

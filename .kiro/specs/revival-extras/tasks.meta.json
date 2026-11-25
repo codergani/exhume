@@ -1,0 +1,65 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. `src/lib/forks.ts` - pure fork functions + example tests": [
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607378666
+      },
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607454226
+      }
+    ],
+    "2. Property-based test for living-fork selection": [
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607457955
+      },
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607512315
+      }
+    ],
+    "3. `src/github/forks.ts` - fetchForks": [
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607516141
+      },
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607591225
+      }
+    ],
+    "4. Optional recommendation in the schema and fork mention in the fallback report": [
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607600413
+      },
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607663919
+      }
+    ],
+    "5. `src/ai/provider.ts` - fork summary in the payload and recommendation handling": [
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795607670678
+      },
+      {
+        "executionId": "a2aaa0c3-848d-4dba-b1b3-5779dd03cb37",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795608316087
+      }
+    ]
+  }
+}

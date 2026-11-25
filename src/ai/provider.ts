@@ -7,6 +7,7 @@ import { initializeApp, getApps } from 'firebase/app'
 import { getAI, getGenerativeModel, GoogleAIBackend } from 'firebase/ai'
 import type { RepoVitals } from '../github/client'
 import type { DepRotReport } from '../github/deps'
+import type { ForkSummary } from '../lib/forks'
 import { autopsyReportSchema } from './schema'
 import type { AutopsyReport } from './fallback'
 import { AutopsyAiError, AutopsySchemaError } from '../errors'
@@ -20,7 +21,8 @@ const APP_NAME = 'exhume-ai'
 
 const SYSTEM_INSTRUCTION = `You are a software archaeologist. Given vital signs and dependency rot data for a GitHub repository, produce a clinical autopsy report as JSON. Do not include any commentary outside the JSON object. Respond only with valid JSON matching this schema exactly:
 { "causeOfDeath": string, "severity": "critical"|"serious"|"stable", "steps": [{ "order": number, "action": string, "rationale": string }] }
-steps must contain 3 to 7 items numbered sequentially from 1. Be terse and clinical.`
+steps must contain 3 to 7 items numbered sequentially from 1. Be terse and clinical.
+If the payload's forks has status "available" and lists at least one fork, you may add an optional "recommendation" object: { "kind": "adopt-fork" | "revive-original", "fork": "owner/name" (only for adopt-fork, and it must be one of the listed forks), "reason": string }. Omit recommendation entirely if unsure.`
 
 const REQUIRED_ENV = [
   'VITE_FIREBASE_API_KEY',
@@ -29,8 +31,8 @@ const REQUIRED_ENV = [
   'VITE_FIREBASE_APP_ID',
 ] as const
 
-function buildPrompt(vitals: RepoVitals, depRot: DepRotReport): string {
-  return JSON.stringify({ vitals, deps: depRot })
+function buildPrompt(vitals: RepoVitals, depRot: DepRotReport, forks?: ForkSummary): string {
+  return JSON.stringify({ vitals, deps: depRot, forks: forks ?? { status: 'unavailable' } })
 }
 
 /**
@@ -112,7 +114,11 @@ async function generateWithBackoff(
     }
   }
 }
-async function callAI(vitals: RepoVitals, depRot: DepRotReport): Promise<unknown> {
+async function callAI(
+  vitals: RepoVitals,
+  depRot: DepRotReport,
+  forks?: ForkSummary,
+): Promise<unknown> {
   // Config is validated here, before any network call.
   const app = getFirebaseApp()
   const ai = getAI(app, { backend: new GoogleAIBackend() })
@@ -121,7 +127,7 @@ async function callAI(vitals: RepoVitals, depRot: DepRotReport): Promise<unknown
     systemInstruction: SYSTEM_INSTRUCTION,
   })
 
-  const result = await generateWithBackoff(model, buildPrompt(vitals, depRot))
+  const result = await generateWithBackoff(model, buildPrompt(vitals, depRot, forks))
 
   const text = result.response.text()
   // Strip markdown code fences if the model wraps the JSON in ```json ... ```
@@ -142,17 +148,31 @@ async function callAI(vitals: RepoVitals, depRot: DepRotReport): Promise<unknown
 export async function runAutopsy(
   vitals: RepoVitals,
   depRot: DepRotReport,
+  forks?: ForkSummary,
 ): Promise<AutopsyReport> {
-  let raw = await callAI(vitals, depRot)
+  let raw = await callAI(vitals, depRot, forks)
   let parsed = autopsyReportSchema.safeParse(raw)
 
   if (!parsed.success) {
-    raw = await callAI(vitals, depRot)
+    raw = await callAI(vitals, depRot, forks)
     parsed = autopsyReportSchema.safeParse(raw)
     if (!parsed.success) {
       throw new AutopsySchemaError(raw)
     }
   }
 
-  return { ...parsed.data, generatedAt: new Date().toISOString() }
+  const { recommendation, ...rest } = parsed.data
+  const generatedAt = new Date().toISOString()
+  if (recommendation === undefined) return { ...rest, generatedAt }
+
+  if (recommendation.kind === 'adopt-fork') {
+    const listed =
+      forks?.status === 'available'
+        ? forks.top.map((f) => `${f.owner}/${f.name}`.toLowerCase())
+        : []
+    if (!recommendation.fork || !listed.includes(recommendation.fork.toLowerCase())) {
+      return { ...rest, generatedAt }
+    }
+  }
+  return { ...rest, recommendation, generatedAt }
 }

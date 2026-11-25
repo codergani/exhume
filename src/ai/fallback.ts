@@ -5,6 +5,7 @@
 import type { RepoVitals } from '../github/client'
 import type { DepRotReport } from '../github/deps'
 import { classifyStatus } from '../lib/classifyStatus'
+import type { ForkSummary } from '../lib/forks'
 
 export interface RevivalStep {
   order: number
@@ -12,14 +13,25 @@ export interface RevivalStep {
   rationale: string
 }
 
+export interface ForkRecommendation {
+  kind: 'adopt-fork' | 'revive-original'
+  fork?: string // "owner/name"
+  reason: string
+}
+
 export interface AutopsyReport {
   causeOfDeath: string
   severity: 'critical' | 'serious' | 'stable'
   steps: RevivalStep[]
   generatedAt: string // ISO 8601
+  recommendation?: ForkRecommendation
 }
 
-export function buildFallbackReport(vitals: RepoVitals, depRot: DepRotReport): AutopsyReport {
+export function buildFallbackReport(
+  vitals: RepoVitals,
+  depRot: DepRotReport,
+  forks?: ForkSummary,
+): AutopsyReport {
   const status = classifyStatus(vitals)
 
   const severity: AutopsyReport['severity'] =
@@ -54,6 +66,21 @@ export function buildFallbackReport(vitals: RepoVitals, depRot: DepRotReport): A
           'No package.json analysis was available; a manual audit is needed.',
       }
 
+  const topFork = forks?.status === 'available' ? forks.top[0] : undefined
+
+  const step3: RevivalStep = topFork
+    ? {
+        order: 3,
+        action: `Consider adopting the living fork ${topFork.owner}/${topFork.name}`,
+        rationale: `It was pushed ${topFork.monthsSincePush} month${topFork.monthsSincePush === 1 ? '' : 's'} ago with ${topFork.stars} star${topFork.stars === 1 ? '' : 's'}. If the maintainer does not respond, a community fork is the most reliable revival path.`,
+      }
+    : {
+        order: 3,
+        action: 'File a maintainership issue or fork',
+        rationale:
+          'If no active maintainer responds within 30 days, a community fork is the most reliable revival path.',
+      }
+
   const steps: RevivalStep[] = [
     {
       order: 1,
@@ -61,12 +88,7 @@ export function buildFallbackReport(vitals: RepoVitals, depRot: DepRotReport): A
       rationale: `Star count (${vitals.starCount}) and ${vitals.openIssueCount} open issue${vitals.openIssueCount === 1 ? '' : 's'} indicate the level of ongoing demand.`,
     },
     step2,
-    {
-      order: 3,
-      action: 'File a maintainership issue or fork',
-      rationale:
-        'If no active maintainer responds within 30 days, a community fork is the most reliable revival path.',
-    },
+    step3,
   ]
 
   return {
