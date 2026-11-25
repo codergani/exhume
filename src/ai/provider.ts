@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Firebase AI Logic wrapper: the only place in the codebase that calls the AI.
  * Cloud inference only. Firebase config comes from VITE_FIREBASE_* variables.
  * No key is logged, persisted, or included in error messages.
@@ -14,7 +14,7 @@ import { AutopsyAiError, AutopsySchemaError } from '../errors'
 /** Inference mode: cloud only for now; hybrid reserved for a future task. */
 export const INFERENCE_MODE = 'cloud' as const
 
-export const MODEL_NAME = 'gemini-2.0-flash'
+export const MODEL_NAME = 'gemini-3.8-flash'
 
 const APP_NAME = 'exhume-ai'
 

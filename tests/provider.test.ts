@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AutopsyAiError, AutopsySchemaError } from '../src/errors'
 import type { RepoVitals } from '../src/github/client'
 import type { DepRotReport } from '../src/github/deps'
@@ -74,8 +74,8 @@ describe('provider constants', () => {
     expect(INFERENCE_MODE).toBe('cloud')
   })
 
-  it('MODEL_NAME is gemini-2.0-flash', () => {
-    expect(MODEL_NAME).toBe('gemini-2.0-flash')
+  it('MODEL_NAME is gemini-3.8-flash', () => {
+    expect(MODEL_NAME).toBe('gemini-3.8-flash')
   })
 })
 
