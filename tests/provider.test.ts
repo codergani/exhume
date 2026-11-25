@@ -22,7 +22,8 @@ vi.mock('firebase/ai', () => ({
   GoogleAIBackend: class {},
 }))
 
-const { runAutopsy, INFERENCE_MODE, MODEL_NAME } = await import('../src/ai/provider')
+const { runAutopsy, INFERENCE_MODE, MODEL_NAME, MAX_ATTEMPTS, backoffDelayMs } =
+  await import('../src/ai/provider')
 
 const SECRET = 'AIzaSy-test-secret-key-value'
 
@@ -193,5 +194,157 @@ describe('runAutopsy: behaviour', () => {
     })
     const report = await runAutopsy(vitals, depRot)
     expect(report.causeOfDeath).toBe(validPayload.causeOfDeath)
+  })
+})
+
+/** Mimics a Firebase AIError carrying an HTTP status in customErrorData. */
+function httpError(status: number) {
+  return Object.assign(new Error(`Error fetching: [${status}] upstream`), {
+    customErrorData: { status },
+  })
+}
+
+const okResponse = () => ({ response: { text: () => JSON.stringify(validPayload) } })
+
+describe('runAutopsy: transient failure backoff', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('uses 4 attempts with 1s, 2s, 4s exponential delays', () => {
+    expect(MAX_ATTEMPTS).toBe(4)
+    expect([1, 2, 3].map(backoffDelayMs)).toEqual([1000, 2000, 4000])
+  })
+
+  it('500 then success: succeeds after waiting 1s', async () => {
+    mockGenerateContent.mockRejectedValueOnce(httpError(500)).mockResolvedValueOnce(okResponse())
+
+    const pending = runAutopsy(vitals, depRot)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1) // still waiting
+    await vi.advanceTimersByTimeAsync(1)
+
+    const report = await pending
+    expect(report.causeOfDeath).toBe(validPayload.causeOfDeath)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+  })
+
+  it('three 500s then success: succeeds on the fourth call after 1s, 2s, 4s', async () => {
+    mockGenerateContent
+      .mockRejectedValueOnce(httpError(500))
+      .mockRejectedValueOnce(httpError(500))
+      .mockRejectedValueOnce(httpError(500))
+      .mockResolvedValueOnce(okResponse())
+
+    const pending = runAutopsy(vitals, depRot)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2) // 2s wait not finished
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(3)
+
+    await vi.advanceTimersByTimeAsync(3999)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(3) // 4s wait not finished
+    await vi.advanceTimersByTimeAsync(1)
+
+    const report = await pending
+    expect(report.causeOfDeath).toBe(validPayload.causeOfDeath)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(4)
+  })
+
+  it('four 500s: throws AutopsyAiError after waits of 1s, 2s, 4s, no 5th call', async () => {
+    mockGenerateContent.mockRejectedValue(httpError(500))
+
+    const pending = runAutopsy(vitals, depRot).catch((e) => e)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(4000)
+
+    const err = await pending
+    expect(err).toBeInstanceOf(AutopsyAiError)
+    expect(err.statusCode).toBe(500)
+    expect(err.message).toContain('after 4 attempts')
+    expect(mockGenerateContent).toHaveBeenCalledTimes(4)
+
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(4)
+  })
+  it.each([503, 429])('retries HTTP %i and succeeds', async (status) => {
+    mockGenerateContent.mockRejectedValueOnce(httpError(status)).mockResolvedValueOnce(okResponse())
+
+    const pending = runAutopsy(vitals, depRot)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    await expect(pending).resolves.toMatchObject({ severity: 'critical' })
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+  })
+
+  it('404: no retry, throws immediately', async () => {
+    mockGenerateContent.mockRejectedValue(httpError(404))
+
+    const err = await runAutopsy(vitals, depRot).catch((e) => e)
+
+    expect(err).toBeInstanceOf(AutopsyAiError)
+    expect(err.statusCode).toBe(404)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([400, 401, 403])('HTTP %i: no retry, throws immediately', async (status) => {
+    mockGenerateContent.mockRejectedValue(httpError(status))
+
+    const err = await runAutopsy(vitals, depRot).catch((e) => e)
+
+    expect(err).toBeInstanceOf(AutopsyAiError)
+    expect(err.statusCode).toBe(status)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('an error with no HTTP status is not retried', async () => {
+    mockGenerateContent.mockRejectedValue(new Error('something odd'))
+
+    await expect(runAutopsy(vitals, depRot)).rejects.toBeInstanceOf(AutopsyAiError)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('schema retry still works after a transient failure', async () => {
+    mockGenerateContent
+      .mockRejectedValueOnce(httpError(503))
+      .mockResolvedValueOnce({ response: { text: () => JSON.stringify({ wrong: true }) } })
+      .mockResolvedValueOnce(okResponse())
+
+    const pending = runAutopsy(vitals, depRot)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    await expect(pending).resolves.toMatchObject({ causeOfDeath: validPayload.causeOfDeath })
+    expect(mockGenerateContent).toHaveBeenCalledTimes(3)
+  })
+
+  it('never logs or leaks the key while retrying', async () => {
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    )
+    mockGenerateContent.mockRejectedValue(httpError(500))
+
+    const pending = runAutopsy(vitals, depRot).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(7000)
+    const err = await pending
+
+    expect(err.message).not.toContain(SECRET)
+    for (const spy of spies) {
+      expect(spy).not.toHaveBeenCalled()
+      spy.mockRestore()
+    }
   })
 })

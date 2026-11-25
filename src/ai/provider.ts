@@ -60,6 +60,58 @@ function getFirebaseApp() {
   return initializeApp(readFirebaseConfig(), APP_NAME)
 }
 
+/** HTTP statuses worth retrying. 400, 401, 403 and 404 are permanent and never retried. */
+const TRANSIENT_STATUSES: ReadonlySet<number> = new Set([429, 500, 503])
+
+/** Total attempts per AI call, including the first. */
+export const MAX_ATTEMPTS = 4
+
+/** Delay before retry n (1-based): 1s, 2s, 4s. */
+export function backoffDelayMs(retryNumber: number): number {
+  return 1000 * 2 ** (retryNumber - 1)
+}
+
+/** Reads the HTTP status from a Firebase AIError (customErrorData.status). */
+function httpStatusOf(err: unknown): number | undefined {
+  if (typeof err !== 'object' || err === null) return undefined
+  const status = (err as { customErrorData?: { status?: unknown } }).customErrorData?.status
+  return typeof status === 'number' ? status : undefined
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Calls generateContent, retrying only transient HTTP failures (429, 500, 503)
+ * with exponential backoff. Anything else fails immediately. Error messages
+ * carry the status and the SDK message only; no key or token is logged.
+ */
+async function generateWithBackoff(
+  model: ReturnType<typeof getGenerativeModel>,
+  prompt: string,
+) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await model.generateContent(prompt)
+    } catch (err) {
+      const status = httpStatusOf(err)
+      const msg = err instanceof Error ? err.message : String(err)
+      const transient = status !== undefined && TRANSIENT_STATUSES.has(status)
+
+      if (!transient) {
+        throw new AutopsyAiError(`AI request failed: ${msg}`, status)
+      }
+      if (attempt >= MAX_ATTEMPTS) {
+        throw new AutopsyAiError(
+          `AI request failed after ${MAX_ATTEMPTS} attempts: ${msg}`,
+          status,
+        )
+      }
+      await sleep(backoffDelayMs(attempt))
+    }
+  }
+}
 async function callAI(vitals: RepoVitals, depRot: DepRotReport): Promise<unknown> {
   // Config is validated here, before any network call.
   const app = getFirebaseApp()
@@ -69,13 +121,7 @@ async function callAI(vitals: RepoVitals, depRot: DepRotReport): Promise<unknown
     systemInstruction: SYSTEM_INSTRUCTION,
   })
 
-  let result
-  try {
-    result = await model.generateContent(buildPrompt(vitals, depRot))
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    throw new AutopsyAiError(`AI request failed: ${msg}`)
-  }
+  const result = await generateWithBackoff(model, buildPrompt(vitals, depRot))
 
   const text = result.response.text()
   // Strip markdown code fences if the model wraps the JSON in ```json ... ```
