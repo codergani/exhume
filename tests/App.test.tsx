@@ -497,3 +497,85 @@ describe('App daily quota fallback', () => {
     expect(screen.queryByText(RESTING)).toBeNull()
   })
 })
+
+describe('App report headings by status', () => {
+  async function reportText(): Promise<string> {
+    const region = await screen.findByRole('region', { name: /^autopsy report/i })
+    return region.textContent ?? ''
+  }
+
+  it('DEAD repo: CAUSE OF DEATH and RESURRECTION PLAN', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const text = await reportText()
+    expect(text).toContain('CAUSE OF DEATH')
+    expect(text).toContain('RESURRECTION PLAN')
+    expect(text).not.toContain('WHAT TO WATCH')
+  })
+
+  it('DYING repo keeps the autopsy headings', async () => {
+    fetchMock.mockResolvedValue({ ...vitals, monthsSinceLastPush: 14 })
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const text = await reportText()
+    expect(text).toContain('CAUSE OF DEATH')
+    expect(text).toContain('RESURRECTION PLAN')
+  })
+
+  it('ALIVE repo at 1 month: WHAT TO WATCH and CARE PLAN', async () => {
+    fetchMock.mockResolvedValue({ ...vitals, monthsSinceLastPush: 1 })
+    autopsyMock.mockResolvedValue({ ...report, severity: 'stable' })
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const text = await reportText()
+    expect(text).toContain('WHAT TO WATCH')
+    expect(text).toContain('CARE PLAN')
+    expect(text).not.toContain('CAUSE OF DEATH')
+    expect(text).not.toContain('RESURRECTION PLAN')
+  })
+
+  it('hibernating repo at 7 months: WHAT TO WATCH and WAKE-UP PLAN', async () => {
+    fetchMock.mockResolvedValue({ ...vitals, monthsSinceLastPush: 7 })
+    autopsyMock.mockResolvedValue({ ...report, severity: 'stable' })
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const text = await reportText()
+    expect(text).toContain('WHAT TO WATCH')
+    expect(text).toContain('WAKE-UP PLAN')
+    expect(text).not.toContain('CARE PLAN')
+    expect(text).not.toContain('CAUSE OF DEATH')
+  })
+
+  it('ALIVE fallback report uses the same headings and neutral wording', async () => {
+    fetchMock.mockResolvedValue({ ...vitals, monthsSinceLastPush: 0 })
+    autopsyMock.mockRejectedValue(new AutopsySchemaError({ bad: true }))
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const text = await reportText()
+    expect(text).toContain('the spirits are silent')
+    expect(text).toContain('WHAT TO WATCH')
+    expect(text).toContain('CARE PLAN')
+    expect(text).toContain('pushed this month')
+    expect(text).not.toMatch(/dead|death|abandon|\b0 months?\b/i)
+  })
+
+  it('hibernating fallback report uses WAKE-UP PLAN', async () => {
+    fetchMock.mockResolvedValue({ ...vitals, monthsSinceLastPush: 7 })
+    autopsyMock.mockRejectedValue(new AutopsySchemaError({ bad: true }))
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const text = await reportText()
+    expect(text).toContain('WHAT TO WATCH')
+    expect(text).toContain('WAKE-UP PLAN')
+    expect(text).not.toMatch(/dead|death|abandon/i)
+  })
+})

@@ -178,3 +178,62 @@ describe('buildFallbackReport overview', () => {
     expect('overview' in buildFallbackReport(vitals(6), depRotNoOutdated)).toBe(false)
   })
 })
+
+describe('buildFallbackReport: neutral wording for ALIVE repos', () => {
+  const textOf = (r: ReturnType<typeof buildFallbackReport>) =>
+    [r.causeOfDeath, ...r.steps.flatMap((s) => [s.action, s.rationale])].join(' ')
+
+  it.each([0, 1, 2, 3, 7, 11])('ALIVE at %i months never says dead, death or abandoned', (months) => {
+    for (const deps of [depRotSkipped, depRotNoOutdated, depRotWithOutdated]) {
+      const text = textOf(buildFallbackReport(vitals(months), deps))
+      expect(text).not.toMatch(/dead|death|abandon/i)
+    }
+  })
+
+  it.each([0, 1, 2, 3, 7, 11])('ALIVE at %i months never writes "0 months"', (months) => {
+    expect(textOf(buildFallbackReport(vitals(months), depRotSkipped))).not.toMatch(/\b0 months?\b/)
+  })
+
+  it('ALIVE at 0 months says "pushed this month"', () => {
+    const r = buildFallbackReport(vitals(0), depRotSkipped)
+    expect(r.causeOfDeath).toContain('pushed this month')
+    expect(r.severity).toBe('stable')
+  })
+
+  it('ALIVE at 1 month is "Active" and cites the month and the open issues', () => {
+    const r = buildFallbackReport(vitals(1, false, 100, 5), depRotSkipped)
+    expect(r.causeOfDeath).toBe('Active: last pushed 1 month ago, with 5 open issues. Watch whether issues keep pace with pushes.')
+  })
+
+  it('hibernating at 7 months is "Quiet" and points at the 12-month mark', () => {
+    const r = buildFallbackReport(vitals(7, false, 100, 1), depRotSkipped)
+    expect(r.causeOfDeath).toBe('Quiet: last pushed 7 months ago, with 1 open issue. Watch for a push before the 12-month mark.')
+    expect(r.steps[2].action).toBe('Plan the next push')
+  })
+
+  it('ALIVE keeps exactly 3 steps numbered 1, 2, 3 and no overview', () => {
+    const r = buildFallbackReport(vitals(2), depRotWithOutdated)
+    expect(r.steps.map((s) => s.order)).toEqual([1, 2, 3])
+    expect('overview' in r).toBe(false)
+  })
+
+  it('ALIVE with a living fork names it neutrally and says "this month" for 0 months', () => {
+    const forks = {
+      status: 'available' as const,
+      livingCount: 1,
+      top: [{ owner: 'alice', name: 'phoenix', stars: 12, monthsSincePush: 0 }],
+    }
+    const r = buildFallbackReport(vitals(5), depRotSkipped, forks)
+    expect(r.steps[2].action).toBe('Compare with the fork alice/phoenix')
+    expect(r.steps[2].rationale).toContain('pushed this month')
+    expect(textOf(r)).not.toMatch(/dead|death|abandon|\b0 months?\b/i)
+  })
+
+  it('DEAD and DYING wording is unchanged', () => {
+    expect(buildFallbackReport(vitals(30), depRotSkipped).causeOfDeath).toBe('No commits in 30 months.')
+    expect(buildFallbackReport(vitals(14), depRotSkipped).causeOfDeath).toBe('Activity has stalled for 14 months.')
+    const dead = buildFallbackReport(vitals(30), depRotSkipped)
+    expect(dead.steps[1].action).toBe('Audit the dependency tree')
+    expect(dead.steps[2].action).toBe('File a maintainership issue or fork')
+  })
+})

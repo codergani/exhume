@@ -724,3 +724,14 @@ describe('runAutopsy: per-day quota (HTTP 429)', () => {
     expect(err.message).not.toContain(SECRET)
   })
 })
+
+describe('runAutopsy: zero-month wording rule', () => {
+  it('instruction forbids "0 months" and asks for "pushed this month"', async () => {
+    mockGenerateContent.mockResolvedValue(okResponse())
+    await runAutopsy(vitals, depRot)
+    const params = mockGetGenerativeModel.mock.calls[0] as unknown as [unknown, { systemInstruction: string }]
+    const text = params[1].systemInstruction
+    expect(text).toContain('Never write "0 months"')
+    expect(text).toContain('say "pushed this month" instead')
+  })
+})

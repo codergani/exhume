@@ -1,5 +1,7 @@
 import type { AutopsyReport } from '../ai/fallback'
 import type { AppState } from '../appState'
+import type { RepoStatus } from '../lib/classifyStatus'
+import { statusLabel } from '../lib/statusLabel'
 
 export const FALLBACK_MARKER =
   'the spirits are silent \u2014 showing instrument readings only.'
@@ -26,8 +28,33 @@ export function progressLines(stage: AppState['stage']): string[] {
   }
 }
 
-/** Terminal lines for a finished report; the fallback marker comes first when asked. */
-export function reportLines(report: AutopsyReport, withMarker = false): string[] {
+export interface ReportHeadings {
+  cause: string
+  plan: string
+}
+
+const DEAD_HEADINGS: ReportHeadings = { cause: 'CAUSE OF DEATH', plan: 'RESURRECTION PLAN' }
+
+/**
+ * Report headings by status. DEAD and DYING keep the autopsy wording; a living repo gets
+ * neutral headings. HIBERNATING comes from the presentational statusLabel function.
+ */
+export function reportHeadings(status: RepoStatus, monthsSinceLastPush: number): ReportHeadings {
+  const label = statusLabel(status, monthsSinceLastPush)
+  if (label === 'HIBERNATING') return { cause: 'WHAT TO WATCH', plan: 'WAKE-UP PLAN' }
+  if (label === 'ALIVE') return { cause: 'WHAT TO WATCH', plan: 'CARE PLAN' }
+  return DEAD_HEADINGS
+}
+
+/**
+ * Terminal lines for a finished report; the fallback marker comes first when asked.
+ * Headings default to the DEAD/DYING wording; App.tsx passes reportHeadings(...).
+ */
+export function reportLines(
+  report: AutopsyReport,
+  withMarker = false,
+  headings: ReportHeadings = DEAD_HEADINGS,
+): string[] {
   const out: string[] = []
   if (withMarker) out.push(FALLBACK_MARKER, '')
   if (report.overview) {
@@ -40,8 +67,8 @@ export function reportLines(report: AutopsyReport, withMarker = false): string[]
     }
     out.push('')
   }
-  out.push('CAUSE OF DEATH', report.causeOfDeath, '', `SEVERITY: ${report.severity.toUpperCase()}`, '')
-  out.push('RESURRECTION PLAN')
+  out.push(headings.cause, report.causeOfDeath, '', `SEVERITY: ${report.severity.toUpperCase()}`, '')
+  out.push(headings.plan)
   for (const step of report.steps) {
     out.push(`${step.order}. ${step.action}`, `   ${step.rationale}`)
   }

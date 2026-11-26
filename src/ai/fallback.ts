@@ -5,6 +5,7 @@
 import type { RepoVitals } from '../github/client'
 import type { DepRotReport } from '../github/deps'
 import { classifyStatus } from '../lib/classifyStatus'
+import { statusLabel } from '../lib/statusLabel'
 import type { ForkSummary } from '../lib/forks'
 
 export interface RevivalStep {
@@ -34,12 +35,98 @@ export interface AutopsyReport {
   overview?: Overview
 }
 
+/** "this month" for 0, never "0 months"; otherwise "N month(s) ago". */
+function sincePush(months: number): string {
+  if (months <= 0) return 'this month'
+  return `${months} month${months === 1 ? '' : 's'} ago`
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/**
+ * Neutral report for an ALIVE repository (0 to 11 months since the last push).
+ * Never says dead, death or abandoned, and never writes "0 months".
+ */
+function aliveReport(
+  vitals: RepoVitals,
+  depRot: DepRotReport,
+  forks: ForkSummary | undefined,
+): AutopsyReport {
+  const months = vitals.monthsSinceLastPush
+  const hibernating = statusLabel('ALIVE', months) === 'HIBERNATING'
+  const pushed = months <= 0 ? 'pushed this month' : `last pushed ${sincePush(months)}`
+  const issues = plural(vitals.openIssueCount, 'open issue')
+
+  const causeOfDeath = hibernating
+    ? `Quiet: ${pushed}, with ${issues}. Watch for a push before the 12-month mark.`
+    : `Active: ${pushed}, with ${issues}. Watch whether issues keep pace with pushes.`
+
+  const hasOutdated = !depRot.skipped && depRot.outdatedDeps.length > 0
+  const maxMajorsBehind = hasOutdated
+    ? Math.max(...depRot.outdatedDeps.map((d) => d.majorsBehind))
+    : 0
+
+  const step2: RevivalStep = hasOutdated
+    ? {
+        order: 2,
+        action: `Upgrade ${depRot.outdatedDeps.length} outdated dependencies`,
+        rationale: `Dependencies are behind by up to ${plural(maxMajorsBehind, 'major version')}.`,
+      }
+    : vitals.openIssueCount > 0
+      ? {
+          order: 2,
+          action: 'Review the open issues',
+          rationale: `${issues} show where users need help next.`,
+        }
+      : {
+          order: 2,
+          action: 'Keep the issue tracker clear',
+          rationale: 'There are 0 open issues; keep triage quick so it stays that way.',
+        }
+
+  const topFork = forks?.status === 'available' ? forks.top[0] : undefined
+  const step3: RevivalStep = topFork
+    ? {
+        order: 3,
+        action: `Compare with the fork ${topFork.owner}/${topFork.name}`,
+        rationale: `It was pushed ${sincePush(topFork.monthsSincePush)} with ${plural(topFork.stars, 'star')}; check it for changes worth merging back.`,
+      }
+    : hibernating
+      ? {
+          order: 3,
+          action: 'Plan the next push',
+          rationale: `The repository was ${pushed}; a small release before the 12-month mark keeps it active.`,
+        }
+      : {
+          order: 3,
+          action: 'Keep the release rhythm',
+          rationale: `The repository was ${pushed}; keep pushes and releases regular.`,
+        }
+
+  return {
+    causeOfDeath,
+    severity: 'stable',
+    steps: [
+      {
+        order: 1,
+        action: 'Assess community interest',
+        rationale: `Star count (${vitals.starCount}) and ${issues} indicate the level of ongoing demand.`,
+      },
+      step2,
+      step3,
+    ],
+    generatedAt: new Date().toISOString(),
+  }
+}
+
 export function buildFallbackReport(
   vitals: RepoVitals,
   depRot: DepRotReport,
   forks?: ForkSummary,
 ): AutopsyReport {
   const status = classifyStatus(vitals)
+  // ALIVE repositories get neutral wording; DEAD and DYING output is unchanged below.
+  if (status === 'ALIVE') return aliveReport(vitals, depRot, forks)
 
   const severity: AutopsyReport['severity'] =
     status === 'DEAD' ? 'critical' : status === 'DYING' ? 'serious' : 'stable'

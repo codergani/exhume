@@ -21,7 +21,7 @@ import { VitalsPanel } from './ui/VitalsPanel'
 import { ForksPanel } from './ui/ForksPanel'
 import { ReadmePanel } from './ui/ReadmePanel'
 import { ErrorBanner } from './ui/ErrorBanner'
-import { progressLines, reportLines } from './ui/lines'
+import { progressLines, reportHeadings, reportLines } from './ui/lines'
 import { prefersReducedMotion } from './ui/motion'
 
 const INVALID_URL_MESSAGE =
@@ -288,7 +288,11 @@ function App() {
       {(state.stage === 'RESULTS' || state.stage === 'FALLBACK') && (
         <TerminalOutput
           key={state.report.generatedAt}
-          lines={reportLines(state.report, state.stage === 'FALLBACK')}
+          lines={reportLines(
+            state.report,
+            state.stage === 'FALLBACK',
+            reportHeadings(classifyStatus(state.vitals), state.vitals.monthsSinceLastPush),
+          )}
           typewriterActive
           label={state.stage === 'FALLBACK' ? 'Autopsy report (instrument readings only)' : 'Autopsy report'}
         />

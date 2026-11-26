@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { reportLines, FALLBACK_MARKER } from '../src/ui/lines'
+import { reportLines, reportHeadings, FALLBACK_MARKER } from '../src/ui/lines'
 import type { AutopsyReport } from '../src/ai/fallback'
 
 const base: AutopsyReport = {
@@ -72,5 +72,51 @@ describe('reportLines', () => {
     expect(lines[0]).toBe(FALLBACK_MARKER)
     expect(lines[1]).toBe('')
     expect(lines[2]).toBe('OVERVIEW')
+  })
+})
+
+describe('report headings by status', () => {
+  it.each([
+    ['DEAD', 0],
+    ['DEAD', 30],
+    ['DYING', 14],
+    ['DYING', 5],
+  ] as const)('%s at %i months keeps CAUSE OF DEATH and RESURRECTION PLAN', (status, months) => {
+    expect(reportHeadings(status, months)).toEqual({ cause: 'CAUSE OF DEATH', plan: 'RESURRECTION PLAN' })
+  })
+
+  it.each([0, 1, 2])('ALIVE at %i months uses WHAT TO WATCH and CARE PLAN', (months) => {
+    expect(reportHeadings('ALIVE', months)).toEqual({ cause: 'WHAT TO WATCH', plan: 'CARE PLAN' })
+  })
+
+  it.each([3, 7, 11])('hibernating (ALIVE at %i months) uses WHAT TO WATCH and WAKE-UP PLAN', (months) => {
+    expect(reportHeadings('ALIVE', months)).toEqual({ cause: 'WHAT TO WATCH', plan: 'WAKE-UP PLAN' })
+  })
+
+  it('reportLines prints the given headings in place of the defaults', () => {
+    const lines = reportLines(base, false, reportHeadings('ALIVE', 1))
+    expect(lines[0]).toBe('WHAT TO WATCH')
+    expect(lines).toContain('CARE PLAN')
+    expect(lines).not.toContain('CAUSE OF DEATH')
+    expect(lines).not.toContain('RESURRECTION PLAN')
+  })
+
+  it('reportLines with hibernating headings prints WAKE-UP PLAN before the steps', () => {
+    const lines = reportLines(base, false, reportHeadings('ALIVE', 7))
+    expect(lines[0]).toBe('WHAT TO WATCH')
+    expect(lines[lines.indexOf('WAKE-UP PLAN') + 1]).toBe('1. Assess interest')
+  })
+
+  it('reportLines with DEAD headings equals the default output', () => {
+    expect(reportLines(base, true, reportHeadings('DEAD', 30))).toEqual(reportLines(base, true))
+  })
+
+  it('headings follow the marker and the overview block', () => {
+    const lines = reportLines(
+      { ...base, overview: { purpose: 'p', audience: 'a', quickStart: [] } },
+      true,
+      reportHeadings('ALIVE', 1),
+    )
+    expect(lines.slice(0, 7)).toEqual([FALLBACK_MARKER, '', 'OVERVIEW', 'Purpose: p', 'Audience: a', '', 'WHAT TO WATCH'])
   })
 })

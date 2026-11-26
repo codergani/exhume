@@ -33,6 +33,7 @@ Status rules:
 Step rules:
 - Every step cites at least one concrete value from the input (months since last push, stars, open issues, or a named fork as owner/name) and ends with a short reason.
 - Write each action as an imperative sentence. Keep each step, action and rationale together, under 25 words.
+- Never write "0 months". When a month count in the input is 0 (vitals.monthsSinceLastPush or a fork's monthsSincePush), say "pushed this month" instead.
 - If forks.status is "available" and forks.top lists at least one fork, step 1 must say whether to adopt that fork or revive the original, and must name the fork as owner/name.
 
 Content rules:
