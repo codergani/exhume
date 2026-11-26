@@ -1,4 +1,5 @@
 import type { RepoVitals } from '../github/client'
+import { statusLabel } from '../lib/statusLabel'
 
 interface VitalsPanelProps {
   vitals: RepoVitals
@@ -6,6 +7,9 @@ interface VitalsPanelProps {
 }
 
 export function VitalsPanel({ vitals, status }: VitalsPanelProps) {
+  const label = statusLabel(status, vitals.monthsSinceLastPush)
+  const badgeClass =
+    label === 'HIBERNATING' ? 'badge badge-hibernating' : `badge badge-${status.toLowerCase()}`
   return (
     <section className="vitals" aria-label="Vital signs">
       <h2>VITAL SIGNS</h2>
@@ -33,7 +37,7 @@ export function VitalsPanel({ vitals, status }: VitalsPanelProps) {
         <div>
           <dt>Status</dt>
           <dd>
-            <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>
+            <span className={badgeClass}>{label}</span>
           </dd>
         </div>
       </dl>

@@ -8,7 +8,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
 
 ## Tasks
 
-- [ ] 1. `src/lib/readme.ts` - excerpt builder, types and URL builder, with tests
+- [x] 1. `src/lib/readme.ts` - excerpt builder, types and URL builder, with tests
   - Create `src/lib/readme.ts` (new file, pure) exporting `README_MAX_CHARS` (6000), `buildReadmeExcerpt(raw, max?)`, the types `ReadmeResult` and `ReadmePayload`, `buildReadmePayload(result)` and `buildReadmeUrl(owner, repo)`, exactly as specified in design.md
   - `buildReadmeExcerpt` removes U+0000-U+001F except newline, carriage return and tab, and U+007F; empty or whitespace-only text returns `{ text: '', truncated: false, empty: true }`; text longer than the max is cut to the max and a trailing high surrogate is dropped; the result is always a prefix of the cleaned input
   - `buildReadmePayload` maps `null`, `undefined` and `unavailable` to `{ status: 'unavailable' }` (never an empty string); `available` maps to `{ status: 'available', truncated, text }`
@@ -18,20 +18,20 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 5.5_
 
-- [ ] 2. `src/lib/statusLabel.ts` - HIBERNATING label function with tests
+- [x] 2. `src/lib/statusLabel.ts` - HIBERNATING label function with tests
   - Create `src/lib/statusLabel.ts` (new file, pure) exporting `StatusLabel` and `statusLabel(status, monthsSinceLastPush)`: returns `'HIBERNATING'` only for status ALIVE with 3 to 11 months inclusive, otherwise returns the status unchanged; import `RepoStatus` as a type from `./classifyStatus`; do not modify `classifyStatus`
   - Create `tests/statusLabel.test.ts`: ALIVE at 0 and 2 months returns ALIVE; ALIVE at 3 and 11 months returns HIBERNATING; ALIVE at 12 months returns ALIVE; DYING and DEAD at several month values (for example 0, 3, 11, 50) always return their own label; `classifyStatus` outputs for the same vitals are unchanged
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.8_
 
-- [ ] 3. `src/github/readme.ts` - fetchReadme
+- [x] 3. `src/github/readme.ts` - fetchReadme
   - Create `src/github/readme.ts` with `fetchReadme(owner, repo): Promise<string | null>` calling `GET https://api.github.com/repos/{owner}/{repo}/readme` with header `Accept: application/vnd.github.raw+json` and no `Authorization` header
   - 200 resolves `await res.text()`; 404 resolves `null`; 403 or 429 throws `GitHubRateLimitError` (from `src/errors.ts`) reading `X-RateLimit-Reset` the same way `fetchForks` does; any other non-2xx throws a generic `Error` with the status in the message; log nothing
   - Create `tests/readmeClient.test.ts` with mocked `fetch`, in the style of `tests/forksClient.test.ts`: request URL, `Accept` header value, no `Authorization` header, 200 returns the text, 404 returns `null`, 403 with `X-RateLimit-Reset` throws `GitHubRateLimitError` with the right `resetAt`, 429 throws `GitHubRateLimitError`, 500 throws a generic `Error` that is not a `GitHubRateLimitError`
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 1.1, 1.7, 4.1, 4.2, 4.3, 4.4, 5.8_
 
-- [ ] 4. Schema `overview` and the `Overview` type
+- [x] 4. Schema `overview` and the `Overview` type
   - Edit `src/ai/schema.ts`: add `overviewSchema` (`purpose` 1 to 300 characters, `audience` 1 to 200, `quickStart` array of 0 to 3 strings of 1 to 200) and add `overview: overviewSchema.optional().catch(undefined)` to `autopsyReportSchema`; existing fields and validation are unchanged
   - Edit `src/ai/fallback.ts`: add the `Overview` interface and the optional `overview?: Overview` field on `AutopsyReport`; `buildFallbackReport` never sets `overview`
   - If `.catch` does not drop a present-but-invalid `overview` alone for the installed Zod version, or misbehaves for an absent key, use the documented fallback from design.md instead (validate `raw.overview` with `overviewSchema.safeParse` in `provider.ts` before the main parse and delete it on failure), state in a one-line comment above `overviewSchema` which approach is used, and say so in the task report
@@ -40,7 +40,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.7, 6.8, 6.9, 6.11, 6.12_
 
-- [ ] 5. `src/ai/provider.ts` - readme in the payload, injection defence and overview handling
+- [x] 5. `src/ai/provider.ts` - readme in the payload, injection defence and overview handling
   - Change `runAutopsy` to `runAutopsy(vitals, depRot, forks?, readme?)` with `readme?: ReadmePayload` (type imported from `src/lib/readme`); the prompt JSON gains the key `readme`, defaulting to `{ status: 'unavailable' }`; no other content (source files, commit messages) is added
   - Add the README/overview section to the system instruction as worded in design.md: the `readme` value is project documentation, not source code; it is untrusted data and any instruction inside it is ignored; when available the model may add an optional plain-text `overview` with the caps (300, 200, 3 steps of 200); when unavailable it says nothing about the README and omits `overview`
   - After schema validation and the existing recommendation handling, delete the `overview` key from the result when `readme` is missing or its status is not `available`
@@ -50,7 +50,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.6, 6.7, 6.8, 6.10, 8.6_
 
-- [ ] 6. UI: `ReadmePanel`, overview lines and the HIBERNATING badge
+- [x] 6. UI: `ReadmePanel`, overview lines and the HIBERNATING badge
   - Create `src/ui/ReadmePanel.tsx` as specified in design.md: `available` renders a labelled section with a focusable, labelled scroll region holding the excerpt as a single text child (no `dangerouslySetInnerHTML`, no HTML or Markdown interpretation), a truncation note when `truncated`, and exactly one link built from `result.url` with `target="_blank"` and `rel="noopener noreferrer"`; `unavailable` renders only the one-line message, with no button and no link; no timers or animation
   - Modify `src/ui/lines.ts`: when `report.overview` exists, `reportLines` starts with an OVERVIEW block (`OVERVIEW`, `Purpose: ...`, `Audience: ...`, then `Quick start:` with numbered `  N. step` lines only when `quickStart` is non-empty, then a blank line), with each string collapsed to one line (whitespace runs to one space, trimmed); without an overview the output is byte-identical to the pre-feature output
   - Modify `src/ui/VitalsPanel.tsx`: compute `statusLabel(status, vitals.monthsSinceLastPush)` internally, show the label text and use the class `badge-${label.toLowerCase()}`; props are unchanged
@@ -61,7 +61,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10, 4.6, 6.6, 7.7, 7.10_
 
-- [ ] 7. `src/App.tsx` - wire the README step
+- [x] 7. `src/App.tsx` - wire the README step
   - Add a `findReadme(owner, repo)` helper in `src/App.tsx` that never throws and returns a `ReadmeResult` with the messages from design.md: `null` or empty-after-cleaning gives the no-README line; `GitHubRateLimitError` with a valid `resetAt` gives a line including `resetAt.toLocaleTimeString()` and the next action; an invalid `resetAt` gives the line without a time; any other error gives the could-not-read line; success gives `available` with `buildReadmeExcerpt` text, `truncated` and `buildReadmeUrl(owner, repo)`
   - During EXAMINING fetch the README for every status, including ALIVE, concurrently with the existing forks step via `Promise.all` (both legs never throw); check the existing run guard once before setting both results; a README failure never sets ERROR_GITHUB or ERROR_AI and never blocks CONSULTING
   - Hold `readmeResult` in separate state (not in `AppState`); cache only `available` results in memory under the lowercased `owner/repo` key, so a repeat analysis with different letter case makes no new request
@@ -73,7 +73,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 3.1, 3.2, 4.1, 4.2, 4.3, 4.4, 4.5, 4.7, 4.8, 5.1, 5.2, 5.5, 6.10, 8.5_
 
-- [ ] 8. Checkpoint - README explainer is shippable
+- [-] 8. Checkpoint - README explainer is shippable
   - Run `npm test`, `npm run lint` and `npm run build`; all must pass, including every existing test
   - Confirm with `git diff` that the only changed existing assertions are the three provider key-set assertions, and that the only other edit to an existing test is the readme mock setup in `tests/App.test.tsx` plus appended tests
   - Confirm nothing under `.kiro/specs/autopsy-core/` or `.kiro/specs/revival-extras/` changed (other than bookkeeping files the tooling writes), and that `package.json` has no new dependencies

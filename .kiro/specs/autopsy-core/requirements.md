@@ -51,4 +51,4 @@ in a haunted terminal interface. This spec covers the core MVP.
 #### Acceptance Criteria
 1. WHEN the GitHub rate limit is hit THEN the system SHALL show the reset time and what to do.
 2. WHEN the network or AI call fails THEN the system SHALL show a recoverable error and keep the vitals already computed.
-3. The client bundle SHALL contain no API keys or secrets.
+3. The client bundle and the repository SHALL contain no secret credentials; the public Firebase web config (VITE_FIREBASE_*) MAY be in the client bundle, protected by API key restrictions and App Check, and .env files SHALL NOT be committed.

@@ -34,3 +34,22 @@ describe('VitalsPanel', () => {
     expect(badge.className).toContain(`badge-${status.toLowerCase()}`)
   })
 })
+
+describe('VitalsPanel status label', () => {
+  it.each([3, 11])('ALIVE at %i months shows HIBERNATING', (months) => {
+    render(<VitalsPanel vitals={{ ...vitals, monthsSinceLastPush: months }} status="ALIVE" />)
+    const badge = screen.getByText('HIBERNATING')
+    expect(badge.className).toContain('badge-hibernating')
+    expect(screen.queryByText('ALIVE')).toBeNull()
+  })
+
+  it('ALIVE at 2 months shows ALIVE', () => {
+    render(<VitalsPanel vitals={{ ...vitals, monthsSinceLastPush: 2 }} status="ALIVE" />)
+    expect(screen.getByText('ALIVE').className).toContain('badge-alive')
+  })
+
+  it.each(['DYING', 'DEAD'] as const)('%s at 5 months is unaffected', (status) => {
+    render(<VitalsPanel vitals={{ ...vitals, monthsSinceLastPush: 5 }} status={status} />)
+    expect(screen.getByText(status).className).toContain(`badge-${status.toLowerCase()}`)
+  })
+})

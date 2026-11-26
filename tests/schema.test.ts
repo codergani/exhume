@@ -40,3 +40,90 @@ describe('autopsyReportSchema recommendation', () => {
     expect(autopsyReportSchema.safeParse(reply({}, steps.slice(0, 2))).success).toBe(false)
   })
 })
+
+describe('overview', () => {
+  const validOverview = {
+    purpose: 'Parses things.',
+    audience: 'Developers.',
+    quickStart: ['npm install', 'npm start'],
+  }
+
+  function parse(overview: unknown) {
+    const result = autopsyReportSchema.safeParse(reply({ overview }))
+    if (!result.success) throw new Error('expected a successful parse')
+    return result.data
+  }
+
+  function expectDropped(overview: unknown) {
+    const data = parse(overview)
+    expect(data.overview).toBeUndefined()
+    expect(data.causeOfDeath).toBe('x')
+    expect(data.severity).toBe('critical')
+    expect(data.steps).toEqual(steps)
+  }
+
+  it('parses a reply without overview and leaves no overview key', () => {
+    const result = autopsyReportSchema.safeParse(reply())
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect('overview' in result.data).toBe(false)
+      expect(result.data).toEqual(reply())
+    }
+  })
+
+  it('keeps a valid overview', () => {
+    expect(parse(validOverview).overview).toEqual(validOverview)
+  })
+
+  it('accepts an empty quickStart list', () => {
+    const o = { ...validOverview, quickStart: [] }
+    expect(parse(o).overview).toEqual(o)
+  })
+
+  it('accepts exactly 3 quickStart steps', () => {
+    const o = { ...validOverview, quickStart: ['a', 'b', 'c'] }
+    expect(parse(o).overview).toEqual(o)
+  })
+
+  it('accepts a 300-character purpose and a 200-character audience', () => {
+    const o = { ...validOverview, purpose: 'p'.repeat(300), audience: 'a'.repeat(200) }
+    expect(parse(o).overview).toEqual(o)
+  })
+
+  it('drops an overview with a 301-character purpose', () => {
+    expectDropped({ ...validOverview, purpose: 'p'.repeat(301) })
+  })
+
+  it('drops an overview with a 201-character audience', () => {
+    expectDropped({ ...validOverview, audience: 'a'.repeat(201) })
+  })
+
+  it('drops an overview with a 201-character quickStart step', () => {
+    expectDropped({ ...validOverview, quickStart: ['s'.repeat(201)] })
+  })
+
+  it('drops an overview with an empty string field', () => {
+    expectDropped({ ...validOverview, purpose: '' })
+    expectDropped({ ...validOverview, quickStart: [''] })
+  })
+
+  it('drops an overview with 4 quickStart steps', () => {
+    expectDropped({ ...validOverview, quickStart: ['a', 'b', 'c', 'd'] })
+  })
+
+  it('drops a non-object overview', () => {
+    expectDropped('text')
+    expectDropped(42)
+    expectDropped(null)
+  })
+
+  it('drops an overview with a wrong-typed field', () => {
+    expectDropped({ ...validOverview, purpose: 7 })
+    expectDropped({ ...validOverview, quickStart: 'npm start' })
+  })
+
+  it('still fails when the rest of the reply is malformed', () => {
+    const r = reply({ overview: validOverview }, steps.slice(0, 2))
+    expect(autopsyReportSchema.safeParse(r).success).toBe(false)
+  })
+})

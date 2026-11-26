@@ -10,12 +10,16 @@ import type { DepRotReport } from './github/deps'
 import { fetchForks } from './github/forks'
 import { buildForkSummary, monthsSince, selectLivingForks } from './lib/forks'
 import type { ForkResult } from './lib/forks'
+import { fetchReadme } from './github/readme'
+import { buildReadmeExcerpt, buildReadmePayload, buildReadmeUrl } from './lib/readme'
+import type { ReadmeResult } from './lib/readme'
 import { runAutopsy } from './ai/provider'
 import { buildFallbackReport } from './ai/fallback'
 import { AutopsyAiError, AutopsySchemaError, GitHubRateLimitError } from './errors'
 import { TerminalOutput } from './ui/TerminalOutput'
 import { VitalsPanel } from './ui/VitalsPanel'
 import { ForksPanel } from './ui/ForksPanel'
+import { ReadmePanel } from './ui/ReadmePanel'
 import { ErrorBanner } from './ui/ErrorBanner'
 import { progressLines, reportLines } from './ui/lines'
 import { prefersReducedMotion } from './ui/motion'
@@ -65,6 +69,36 @@ async function findForks(owner: string, repo: string, vitals: RepoVitals): Promi
   }
 }
 
+const README_MISSING_MESSAGE = 'no readme was left with these remains.'
+
+/** Reads the README. Never throws: failures and missing files become 'unavailable'. */
+async function findReadme(owner: string, repo: string): Promise<ReadmeResult> {
+  try {
+    const text = await fetchReadme(owner, repo)
+    if (text === null) return { status: 'unavailable', message: README_MISSING_MESSAGE }
+    const ex = buildReadmeExcerpt(text)
+    if (ex.empty) return { status: 'unavailable', message: README_MISSING_MESSAGE }
+    return { status: 'available', text: ex.text, truncated: ex.truncated, url: buildReadmeUrl(owner, repo) }
+  } catch (err) {
+    if (err instanceof GitHubRateLimitError) {
+      if (Number.isNaN(err.resetAt.getTime())) {
+        return {
+          status: 'unavailable',
+          message: 'the readme vault is sealed. the report does not depend on it; try again later.',
+        }
+      }
+      return {
+        status: 'unavailable',
+        message: `the readme vault is sealed until ${err.resetAt.toLocaleTimeString()}. the report does not depend on it; try again after then.`,
+      }
+    }
+    return {
+      status: 'unavailable',
+      message: 'could not read the readme. the report does not depend on it.',
+    }
+  }
+}
+
 function App() {
   const [state, setState] = useState<AppState>({ stage: 'IDLE' })
   const [url, setUrl] = useState('')
@@ -76,17 +110,21 @@ function App() {
   // The forks step outcome lives outside AppState. Only successful lookups are cached.
   const [forkResult, setForkResult] = useState<ForkResult | null>(null)
   const forksCache = useRef(new Map<string, ForkResult>())
+  // The README step outcome also lives outside AppState. Only available results are cached.
+  const [readmeResult, setReadmeResult] = useState<ReadmeResult | null>(null)
+  const readmeCache = useRef(new Map<string, ReadmeResult>())
 
   async function consult(
     vitals: RepoVitals,
     depRot: DepRotReport,
     forks: ForkResult,
+    readme: ReadmeResult,
     isCurrent: () => boolean,
   ) {
     setState({ stage: 'CONSULTING', vitals, depRot })
     const summary = buildForkSummary(forks, new Date())
     try {
-      const report = await runAutopsy(vitals, depRot, summary)
+      const report = await runAutopsy(vitals, depRot, summary, buildReadmePayload(readme))
       if (isCurrent()) setState({ stage: 'RESULTS', vitals, depRot, report })
     } catch (err) {
       if (!isCurrent()) return
@@ -128,35 +166,41 @@ function App() {
 
     setState({ stage: 'EXAMINING', vitals })
 
-    let forks: ForkResult = { status: 'skipped' }
-    if (classifyStatus(vitals) !== 'ALIVE') {
-      forks = forksCache.current.get(key) ?? (await findForks(parsed.owner, parsed.repo, vitals))
-      if (!isCurrent()) return
-      if (forks.status === 'available') forksCache.current.set(key, forks)
+    const loadForks = async (): Promise<ForkResult> => {
+      if (classifyStatus(vitals) === 'ALIVE') return { status: 'skipped' }
+      return forksCache.current.get(key) ?? (await findForks(parsed.owner, parsed.repo, vitals))
     }
+    const loadReadme = async (): Promise<ReadmeResult> =>
+      readmeCache.current.get(key) ?? (await findReadme(parsed.owner, parsed.repo))
+    const [forks, readme] = await Promise.all([loadForks(), loadReadme()])
+    if (!isCurrent()) return
+    if (forks.status === 'available') forksCache.current.set(key, forks)
+    if (readme.status === 'available') readmeCache.current.set(key, readme)
     setForkResult(forks)
+    setReadmeResult(readme)
 
     if (!prefersReducedMotion()) {
       await new Promise((resolve) => setTimeout(resolve, STAGE_PAUSE_MS))
       if (!isCurrent()) return
     }
 
-    await consult(vitals, SKIPPED_DEP_ROT, forks, isCurrent)
+    await consult(vitals, SKIPPED_DEP_ROT, forks, readme, isCurrent)
   }
 
   /** ERROR_AI -> CONSULTING with the vitals already held; GitHub is not called again. */
   function handleRetry() {
     if (state.stage !== 'ERROR_AI') return
-    if (!forkResult) return
+    if (!forkResult || !readmeResult) return
     const { vitals, depRot } = state
     const runId = ++runRef.current
-    void consult(vitals, depRot, forkResult, () => runRef.current === runId)
+    void consult(vitals, depRot, forkResult, readmeResult, () => runRef.current === runId)
   }
 
   function handleReset() {
     runRef.current++
     setInputError(null)
     setForkResult(null)
+    setReadmeResult(null)
     setState({ stage: 'IDLE' })
   }
 
@@ -229,6 +273,8 @@ function App() {
           label={state.stage === 'FALLBACK' ? 'Autopsy report (instrument readings only)' : 'Autopsy report'}
         />
       )}
+
+      {readmeResult && finished && <ReadmePanel result={readmeResult} />}
 
       {finished && (
         <div className="actions">

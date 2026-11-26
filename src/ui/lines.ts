@@ -30,6 +30,16 @@ export function progressLines(stage: AppState['stage']): string[] {
 export function reportLines(report: AutopsyReport, withMarker = false): string[] {
   const out: string[] = []
   if (withMarker) out.push(FALLBACK_MARKER, '')
+  if (report.overview) {
+    const one = (s: string) => s.replace(/\s+/g, ' ').trim()
+    const { purpose, audience, quickStart } = report.overview
+    out.push('OVERVIEW', `Purpose: ${one(purpose)}`, `Audience: ${one(audience)}`)
+    if (quickStart.length > 0) {
+      out.push('Quick start:')
+      quickStart.forEach((step, i) => out.push(`  ${i + 1}. ${one(step)}`))
+    }
+    out.push('')
+  }
   out.push('CAUSE OF DEATH', report.causeOfDeath, '', `SEVERITY: ${report.severity.toUpperCase()}`, '')
   out.push('RESURRECTION PLAN')
   for (const step of report.steps) {

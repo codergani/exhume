@@ -19,12 +19,19 @@ export interface ForkRecommendation {
   reason: string
 }
 
+export interface Overview {
+  purpose: string
+  audience: string
+  quickStart: string[]
+}
+
 export interface AutopsyReport {
   causeOfDeath: string
   severity: 'critical' | 'serious' | 'stable'
   steps: RevivalStep[]
   generatedAt: string // ISO 8601
   recommendation?: ForkRecommendation
+  overview?: Overview
 }
 
 export function buildFallbackReport(

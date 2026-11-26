@@ -7,16 +7,19 @@ import type { RepoVitals } from '../src/github/client'
 vi.mock('../src/github/client', () => ({ fetchRepoVitals: vi.fn() }))
 vi.mock('../src/ai/provider', () => ({ runAutopsy: vi.fn() }))
 vi.mock('../src/github/forks', () => ({ fetchForks: vi.fn() }))
+vi.mock('../src/github/readme', () => ({ fetchReadme: vi.fn() }))
 
 import App from '../src/App'
 import { fetchRepoVitals } from '../src/github/client'
 import { runAutopsy } from '../src/ai/provider'
 import { fetchForks } from '../src/github/forks'
+import { fetchReadme } from '../src/github/readme'
 import type { ForkCandidate } from '../src/lib/forks'
 
 const fetchMock = vi.mocked(fetchRepoVitals)
 const autopsyMock = vi.mocked(runAutopsy)
 const forksMock = vi.mocked(fetchForks)
+const readmeMock = vi.mocked(fetchReadme)
 
 const vitals: RepoVitals = {
   lastPushDate: '2021-03-15T10:22:00Z',
@@ -45,6 +48,7 @@ function submit(url: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   forksMock.mockResolvedValue([])
+  readmeMock.mockResolvedValue(null)
   // Reduced motion: no stage pause, results shown instantly.
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
@@ -239,5 +243,185 @@ describe('App fork finder', () => {
     expect(await screen.findByText(/Neglect and dependency rot/)).not.toBeNull()
     expect(screen.getByText(/no living forks found/)).not.toBeNull()
     expect(autopsyMock.mock.calls[0][2]).toMatchObject({ status: 'available', livingCount: 0 })
+  })
+})
+
+describe('App readme explainer', () => {
+  const recent = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  const MISSING = 'no readme was left with these remains.'
+
+  it('DEAD repo: the README panel follows the report and links to the original', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('# Widget\n\nA tiny library.')
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const reportNode = await screen.findByText(/Neglect and dependency rot/)
+    const readmeNode = await screen.findByText(/A tiny library\./)
+    expect(readmeMock).toHaveBeenCalledWith('octocat', 'hello-world')
+    expect(
+      reportNode.compareDocumentPosition(readmeNode) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    const link = screen.getByRole('link', { name: /original readme/i })
+    expect(link.getAttribute('href')).toBe('https://github.com/octocat/hello-world#readme')
+    expect(link.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('the overview is shown inside the report, before CAUSE OF DEATH', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('# Widget\n\nA tiny library.')
+    autopsyMock.mockResolvedValue({
+      ...report,
+      overview: { purpose: 'Parses widgets.', audience: 'Widget authors.', quickStart: ['Install it.'] },
+    })
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const node = await screen.findByText(/Purpose: Parses widgets\./)
+    const text = node.textContent ?? ''
+    expect(text.indexOf('Purpose: Parses widgets.')).toBeGreaterThanOrEqual(0)
+    expect(text.indexOf('Purpose: Parses widgets.')).toBeLessThan(text.indexOf('CAUSE OF DEATH'))
+  })
+
+  it('ALIVE repo: fetchReadme is called and fetchForks is not', async () => {
+    fetchMock.mockResolvedValue({ ...vitals, monthsSinceLastPush: 3, lastPushDate: recent })
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(readmeMock).toHaveBeenCalledTimes(1)
+    expect(forksMock).not.toHaveBeenCalled()
+  })
+
+  it('missing README: one line, report still shown, no alert', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue(null)
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(screen.getAllByText(MISSING)).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('fetch failure: one line, report still shown', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockRejectedValue(new Error('boom'))
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(screen.getAllByText(/could not read the readme\./)).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('rate limit: the line shows the reset time and the report appears', async () => {
+    const resetAt = new Date('2025-01-01T01:00:00Z')
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockRejectedValue(new GitHubRateLimitError(resetAt))
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(screen.getByText(/readme vault is sealed until/).textContent).toContain(
+      resetAt.toLocaleTimeString(),
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('AI Retry reuses the held README: fetchReadme is called once and the payload is equal', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('# Widget\n\nA tiny library.')
+    autopsyMock
+      .mockRejectedValueOnce(new AutopsyAiError('AI request failed: offline'))
+      .mockResolvedValueOnce(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByRole('alert')
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+
+    expect(await screen.findByText(/Neglect and dependency rot/)).not.toBeNull()
+    expect(readmeMock).toHaveBeenCalledTimes(1)
+    expect(autopsyMock).toHaveBeenCalledTimes(2)
+    expect(autopsyMock.mock.calls[1][3]).toEqual(autopsyMock.mock.calls[0][3])
+  })
+
+  it('runAutopsy receives an available payload when the README exists', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('# Widget\n\nA tiny library.')
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(autopsyMock.mock.calls[0][3]).toEqual({
+      status: 'available',
+      truncated: false,
+      text: '# Widget\n\nA tiny library.',
+    })
+  })
+
+  it('runAutopsy receives an unavailable payload when the README failed, and no panel text is shown', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockRejectedValue(new Error('boom'))
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(autopsyMock.mock.calls[0][3]).toEqual({ status: 'unavailable' })
+    expect(screen.queryByRole('region', { name: /readme text/i })).toBeNull()
+    expect(screen.queryByRole('link', { name: /original readme/i })).toBeNull()
+  })
+
+  it('ERROR_AI: no README panel text is shown', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('# Widget\n\nA tiny library.')
+    autopsyMock.mockRejectedValue(new AutopsyAiError('AI request failed: offline'))
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByRole('alert')
+    expect(readmeMock).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/A tiny library/)).toBeNull()
+    expect(screen.queryByRole('link', { name: /original readme/i })).toBeNull()
+  })
+
+  it('a 7000 character README is shown cut to 6000 with the note and sent cut to 6000', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('a'.repeat(7000))
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    const pane = await screen.findByRole('region', { name: /readme text/i })
+    expect(pane.textContent).toHaveLength(6000)
+    expect(screen.getByText(/cut at 6000 characters/)).not.toBeNull()
+    const payload = autopsyMock.mock.calls[0][3]
+    expect(payload).toMatchObject({ status: 'available', truncated: true })
+    expect(payload && 'text' in payload ? payload.text : '').toHaveLength(6000)
+  })
+
+  it('analysing the same repo again with different letter case reuses the README cache', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('# Widget\n\nA tiny library.')
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    fireEvent.click(screen.getByRole('button', { name: /analyse another/i }))
+    submit('https://github.com/Octocat/Hello-World')
+
+    expect(await screen.findByText(/A tiny library\./)).not.toBeNull()
+    expect(autopsyMock).toHaveBeenCalledTimes(2)
+    expect(readmeMock).toHaveBeenCalledTimes(1)
   })
 })

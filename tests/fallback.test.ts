@@ -167,3 +167,14 @@ describe('buildFallbackReport with fork summary', () => {
     expect('recommendation' in buildFallbackReport(vitals(30), depRotSkipped, withFork)).toBe(false)
   })
 })
+
+describe('buildFallbackReport overview', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('never includes an overview key for critical, serious or stable', () => {
+    expect('overview' in buildFallbackReport(vitals(30), depRotSkipped)).toBe(false)
+    expect('overview' in buildFallbackReport(vitals(18), depRotWithOutdated)).toBe(false)
+    expect('overview' in buildFallbackReport(vitals(6), depRotNoOutdated)).toBe(false)
+  })
+})

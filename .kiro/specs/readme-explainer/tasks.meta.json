@@ -1,0 +1,96 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. `src/lib/readme.ts` - excerpt builder, types and URL builder, with tests": [
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795658853058
+      },
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795658916479
+      }
+    ],
+    "2. `src/lib/statusLabel.ts` - HIBERNATING label function with tests": [
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795658916943
+      },
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795658997989
+      }
+    ],
+    "3. `src/github/readme.ts` - fetchReadme": [
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795658998492
+      },
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659081037
+      }
+    ],
+    "4. Schema `overview` and the `Overview` type": [
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659081347
+      },
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659327612
+      }
+    ],
+    "5. `src/ai/provider.ts` - readme in the payload, injection defence and overview handling": [
+      {
+        "executionId": "78a23c50-9bf2-482e-abc0-97f76b017a7d",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659327225
+      },
+      {
+        "executionId": "6cb715da-40ce-4db9-b00b-2502549eb4a1",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659640319
+      }
+    ],
+    "6. UI: `ReadmePanel`, overview lines and the HIBERNATING badge": [
+      {
+        "executionId": "6cb715da-40ce-4db9-b00b-2502549eb4a1",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659640854
+      },
+      {
+        "executionId": "6cb715da-40ce-4db9-b00b-2502549eb4a1",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659720724
+      }
+    ],
+    "7. `src/App.tsx` - wire the README step": [
+      {
+        "executionId": "6cb715da-40ce-4db9-b00b-2502549eb4a1",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659721131
+      },
+      {
+        "executionId": "6cb715da-40ce-4db9-b00b-2502549eb4a1",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659854477
+      }
+    ],
+    "8. Checkpoint - README explainer is shippable": [
+      {
+        "executionId": "6cb715da-40ce-4db9-b00b-2502549eb4a1",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795659854608
+      }
+    ]
+  }
+}

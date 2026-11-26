@@ -276,3 +276,43 @@ body {
 @keyframes blink {
   50% { opacity: 0; }
 }
+
+.badge-hibernating {
+  color: var(--crypt-dim);
+}
+
+.readme {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--crypt-panel);
+  border: 1px solid var(--crypt-line);
+  border-radius: 2px;
+}
+
+.readme-text {
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+  padding: 12px;
+  font: inherit;
+  color: var(--crypt-text);
+  background: var(--crypt-bg);
+  border: 1px solid var(--crypt-line);
+  text-align: left;
+}
+
+.readme-text:focus-visible {
+  outline: 2px solid var(--crypt-glow);
+  outline-offset: 2px;
+}
+
+.readme-note {
+  margin: 8px 0;
+  color: var(--crypt-dim);
+}
+
+.readme a {
+  color: var(--crypt-glow);
+}

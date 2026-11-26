@@ -3,7 +3,7 @@
 - Stack: Vite + React + TypeScript (strict). No custom backend. Hosted on Firebase Hosting.
 - All LLM calls go through `src/ai/provider.ts` only. It wraps Firebase AI Logic and exposes one
   function per task. Inference mode (cloud now, hybrid on-device later) is a single config value there.
-- No API keys or secrets in the repo or the client bundle. Firebase App Check is on.
+- No SECRET credentials in the repo or the client bundle. The public Firebase web config (VITE_FIREBASE_*) is allowed in the bundle and is protected by API key restrictions and Firebase App Check. Never commit .env files.
 - Deterministic analysis first, LLM second: compute vitals in plain code, then give the LLM structured
   JSON (never raw source files) and validate its JSON reply against a schema before using it.
 - GitHub data: public REST API, unauthenticated by default (60 requests/hour). Cache results in memory.
