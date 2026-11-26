@@ -99,6 +99,7 @@ describe('runAutopsy: configuration', () => {
     expect(mockGetGenerativeModel).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ model: MODEL_NAME }),
+      { timeout: 45_000 },
     )
   })
 
@@ -733,5 +734,126 @@ describe('runAutopsy: zero-month wording rule', () => {
     const text = params[1].systemInstruction
     expect(text).toContain('Never write "0 months"')
     expect(text).toContain('say "pushed this month" instead')
+  })
+})
+
+describe('runAutopsy: request timeout', () => {
+  /** The SDK aborts a timed-out request with a DOMException like this one. */
+  function timeoutError() {
+    return Object.assign(new Error('Timeout has expired.'), { name: 'AbortError' })
+  }
+
+  const okReply = () => ({ response: { text: () => JSON.stringify(validPayload) } })
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('passes a 45 second request timeout to the SDK', async () => {
+    const { REQUEST_TIMEOUT_MS } = await import('../src/ai/provider')
+    mockGenerateContent.mockResolvedValue(okReply())
+    await runAutopsy(vitals, depRot)
+    expect(REQUEST_TIMEOUT_MS).toBe(45_000)
+    expect(mockGetGenerativeModel.mock.calls[0][2]).toEqual({ timeout: 45_000 })
+  })
+
+  it('timeout then success: retried once after 1s and succeeds', async () => {
+    mockGenerateContent.mockRejectedValueOnce(timeoutError()).mockResolvedValueOnce(okReply())
+
+    const pending = runAutopsy(vitals, depRot)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1) // still waiting
+    await vi.advanceTimersByTimeAsync(1)
+
+    await expect(pending).resolves.toMatchObject({ causeOfDeath: validPayload.causeOfDeath })
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+  })
+
+  it('two timeouts: throws AutopsyAiError after exactly 2 attempts', async () => {
+    mockGenerateContent.mockRejectedValue(timeoutError())
+
+    const pending = runAutopsy(vitals, depRot).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(1000)
+    const err = await pending
+
+    expect(err).toBeInstanceOf(AutopsyAiError)
+    expect(err.message).toContain('timed out after 2 attempts')
+    expect(err.quotaExhausted).toBeUndefined()
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2) // no third attempt
+  })
+
+  it.each([
+    ['AbortError name', Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })],
+    ['TimeoutError name', Object.assign(new Error('signal timed out'), { name: 'TimeoutError' })],
+    ['message only', new Error('Error fetching: Timeout has expired.')],
+  ])('recognises a timeout by %s', async (_label, error) => {
+    mockGenerateContent.mockRejectedValueOnce(error).mockResolvedValueOnce(okReply())
+
+    const pending = runAutopsy(vitals, depRot)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    await expect(pending).resolves.toMatchObject({ severity: 'critical' })
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([400, 401, 403, 404])('HTTP %i is never retried, even with a timeout-like message', async (status) => {
+    mockGenerateContent.mockRejectedValue(
+      Object.assign(new Error('Timeout has expired.'), { name: 'AbortError', customErrorData: { status } }),
+    )
+
+    const err = await runAutopsy(vitals, depRot).catch((e) => e)
+
+    expect(err).toBeInstanceOf(AutopsyAiError)
+    expect(err.statusCode).toBe(status)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('the daily-quota 429 path is unchanged: no retry, quota flag set', async () => {
+    mockGenerateContent.mockRejectedValue(
+      Object.assign(new Error('Error fetching: [429 ] GenerateRequestsPerDayPerProjectPerModel'), {
+        customErrorData: { status: 429 },
+      }),
+    )
+
+    const err = await runAutopsy(vitals, depRot).catch((e) => e)
+
+    expect(err.quotaExhausted).toBe(true)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('a per-minute 429 still uses the 4-attempt backoff', async () => {
+    mockGenerateContent.mockRejectedValue(
+      Object.assign(new Error('Error fetching: [429 ] rate limited'), { customErrorData: { status: 429 } }),
+    )
+
+    const pending = runAutopsy(vitals, depRot).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(7000)
+    const err = await pending
+
+    expect(err.message).toContain('after 4 attempts')
+    expect(mockGenerateContent).toHaveBeenCalledTimes(4)
+  })
+
+  it('does not leak README text or the key into a timeout error', async () => {
+    mockGenerateContent.mockRejectedValue(timeoutError())
+
+    const pending = runAutopsy(vitals, depRot, undefined, {
+      status: 'available',
+      truncated: false,
+      text: 'SECRET-README-TEXT',
+    }).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(1000)
+    const err = await pending
+
+    expect(err.message).not.toContain('SECRET-README-TEXT')
+    expect(err.message).not.toContain(SECRET)
   })
 })

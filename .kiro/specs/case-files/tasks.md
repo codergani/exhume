@@ -41,7 +41,7 @@ Constraints for every task: no new dependencies, no backend, no accounts, no pro
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 3.1, 3.2, 3.6, 3.7, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 4.12, 5.1, 5.4, 5.5, 5.6, 6.2, 6.3, 6.4, 7.5, 7.6, 7.8_
 
-- [-] 5. Checkpoint - saved case files phase 1 is shippable
+- [x] 5. Checkpoint - saved case files phase 1 is shippable
   - Run `npm test`, `npm run lint` and `npm run build`; all must pass
   - Confirm with `git diff` that the changes are new files plus `src/App.tsx`, `src/ui/theme.css` and appended tests in `tests/App.test.tsx`, with no existing assertion changed; nothing under the other specs changed; `package.json` has no new dependencies; `dangerouslySetInnerHTML` does not appear in `src`
   - Confirm the built bundle in `dist` contains the placeholder text (proves it is bundled), and that opening the sample with the network disabled shows no request in the network tab

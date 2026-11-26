@@ -129,6 +129,24 @@ export function backoffDelayMs(retryNumber: number): number {
   return 1000 * 2 ** (retryNumber - 1)
 }
 
+/** Permanent HTTP failures: never retried. */
+const PERMANENT_STATUSES: ReadonlySet<number> = new Set([400, 401, 403, 404])
+
+/** Per-request timeout passed to the Firebase AI Logic SDK (RequestOptions.timeout, ms). */
+export const REQUEST_TIMEOUT_MS = 45_000
+
+/** A timed-out request is tried at most this many times in total (one retry after 1s). */
+export const TIMEOUT_MAX_ATTEMPTS = 2
+
+/**
+ * True for a request timeout. The SDK aborts with a DOMException named AbortError and the
+ * message "Timeout has expired."; TimeoutError covers AbortSignal.timeout-style aborts.
+ */
+function isTimeout(err: unknown, msg: string): boolean {
+  const name = typeof err === 'object' && err !== null ? (err as { name?: unknown }).name : undefined
+  return name === 'AbortError' || name === 'TimeoutError' || msg.includes('Timeout has expired')
+}
+
 /** Reads the HTTP status from a Firebase AIError (customErrorData.status). */
 function httpStatusOf(err: unknown): number | undefined {
   if (typeof err !== 'object' || err === null) return undefined
@@ -142,13 +160,15 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Calls generateContent, retrying only transient HTTP failures (429 per-minute, 500, 503)
- * with exponential backoff. Anything else fails immediately. Error messages
- * carry the status and the SDK message only; no key or token is logged.
+ * with exponential backoff, and a request timeout once after 1s. 400, 401, 403 and 404
+ * and anything else fail immediately. Error messages carry the status and the SDK
+ * message only; no key or token is logged.
  */
 async function generateWithBackoff(
   model: ReturnType<typeof getGenerativeModel>,
   prompt: string,
 ) {
+  let timeouts = 0
   for (let attempt = 1; ; attempt++) {
     try {
       return await model.generateContent(prompt)
@@ -157,6 +177,17 @@ async function generateWithBackoff(
       const msg = err instanceof Error ? err.message : String(err)
       if (isDailyQuota(status, err, msg)) {
         throw new AutopsyQuotaError(`AI daily quota exhausted: ${msg}`, status)
+      }
+      if (status !== undefined && PERMANENT_STATUSES.has(status)) {
+        throw new AutopsyAiError(`AI request failed: ${msg}`, status)
+      }
+      if (status === undefined && isTimeout(err, msg)) {
+        timeouts++
+        if (timeouts >= TIMEOUT_MAX_ATTEMPTS) {
+          throw new AutopsyAiError(`AI request timed out after ${TIMEOUT_MAX_ATTEMPTS} attempts: ${msg}`)
+        }
+        await sleep(1000)
+        continue
       }
       const transient = status !== undefined && TRANSIENT_STATUSES.has(status)
 
@@ -182,10 +213,11 @@ async function callAI(
   // Config is validated here, before any network call.
   const app = getFirebaseApp()
   const ai = getAI(app, { backend: new GoogleAIBackend() })
-  const model = getGenerativeModel(ai, {
-    model: MODEL_NAME,
-    systemInstruction: SYSTEM_INSTRUCTION,
-  })
+  const model = getGenerativeModel(
+    ai,
+    { model: MODEL_NAME, systemInstruction: SYSTEM_INSTRUCTION },
+    { timeout: REQUEST_TIMEOUT_MS },
+  )
 
   const result = await generateWithBackoff(model, buildPrompt(vitals, depRot, forks, readme))
 

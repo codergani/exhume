@@ -73,7 +73,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 3.1, 3.2, 4.1, 4.2, 4.3, 4.4, 4.5, 4.7, 4.8, 5.1, 5.2, 5.5, 6.10, 8.5_
 
-- [-] 8. Checkpoint - README explainer is shippable
+- [x] 8. Checkpoint - README explainer is shippable
   - Run `npm test`, `npm run lint` and `npm run build`; all must pass, including every existing test
   - Confirm with `git diff` that the only changed existing assertions are the three provider key-set assertions, and that the only other edit to an existing test is the readme mock setup in `tests/App.test.tsx` plus appended tests
   - Confirm nothing under `.kiro/specs/autopsy-core/` or `.kiro/specs/revival-extras/` changed (other than bookkeeping files the tooling writes), and that `package.json` has no new dependencies

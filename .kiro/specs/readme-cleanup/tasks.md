@@ -25,7 +25,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - Run `npm test`, `npx tsc -b` and `npm run lint`
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 4.7, 4.8, 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [-] 3. Checkpoint - README cleanup is shippable
+- [x] 3. Checkpoint - README cleanup is shippable
   - Run `npm test`, `npm run lint` and `npm run build`; all must pass
   - Confirm with `git diff` that no existing assertion changed except README-text comparisons, that `src/lib/readme.ts` is unchanged, that `package.json` has no new dependencies, and that nothing under `.kiro/specs/autopsy-core/`, `.kiro/specs/revival-extras/`, `.kiro/specs/readme-explainer/` or `.kiro/specs/case-files/` changed
   - Confirm that `grep dangerouslySetInnerHTML src` finds nothing
