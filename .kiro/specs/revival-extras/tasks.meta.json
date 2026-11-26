@@ -60,6 +60,42 @@
         "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
         "timestamp": 1795608316087
       }
+    ],
+    "6. `src/ui/ForksPanel.tsx` - show the living forks": [
+      {
+        "executionId": "45509060-8498-42b0-88b7-9685bef2a3e8",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795657309894
+      },
+      {
+        "executionId": "45509060-8498-42b0-88b7-9685bef2a3e8",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795657391722
+      }
+    ],
+    "7. `src/App.tsx` - wire the fork finder into the flow": [
+      {
+        "executionId": "45509060-8498-42b0-88b7-9685bef2a3e8",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795657397364
+      },
+      {
+        "executionId": "45509060-8498-42b0-88b7-9685bef2a3e8",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795657699070
+      }
+    ],
+    "8. Checkpoint - fork finder is shippable": [
+      {
+        "executionId": "45509060-8498-42b0-88b7-9685bef2a3e8",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795657710534
+      },
+      {
+        "executionId": "45509060-8498-42b0-88b7-9685bef2a3e8",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795657823811
+      }
     ]
   }
 }

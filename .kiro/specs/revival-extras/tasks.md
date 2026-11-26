@@ -43,13 +43,13 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - In `tests/provider.test.ts` change ONLY the existing prompt-keys assertion to expect `['deps', 'forks', 'vitals']`; add new tests: the fork summary is sent as given, `forks` defaults to unavailable when omitted, a reply without `recommendation` is accepted, an invented fork drops the whole recommendation, a listed fork is kept, `revive-original` is kept
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 7.4, 7.5_
 
-- [ ] 6. `src/ui/ForksPanel.tsx` - show the living forks
+- [x] 6. `src/ui/ForksPanel.tsx` - show the living forks
   - Implement `ForksPanel({ result: ForkResult })`: `skipped` renders nothing; `available` with living forks renders up to 3 entries, each with a link (`rel="noopener noreferrer"`, `target="_blank"`), the star count and the last push as `YYYY-MM-DD`; `available` with none renders one in-theme line saying no living forks were found; `unavailable` renders its one-line message with no button
   - No timers or animation, so the markup is identical when reduced motion is preferred; add small styles to `src/ui/theme.css` using the existing `--crypt-*` variables so text stays readable
   - Create `tests/ForksPanel.test.tsx` (this folds the render-completeness property into example tests): 1, 2 and 3 forks each show link, `rel`, stars and date; zero living shows the one line; `unavailable` shows the message and no button; `skipped` renders nothing
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 4.4_
 
-- [ ] 7. `src/App.tsx` - wire the fork finder into the flow
+- [x] 7. `src/App.tsx` - wire the fork finder into the flow
   - After vitals are fetched, when `classifyStatus(vitals)` is DEAD or DYING call `fetchForks` during the existing EXAMINING phase; when ALIVE make no forks call and keep the result `skipped`
   - Wrap the forks step in try/catch: any failure becomes `{ status: 'unavailable', message }` with one in-theme line; for `GitHubRateLimitError` include the reset time in local time format and what to do next; never set ERROR_GITHUB or ERROR_AI and never block CONSULTING
   - On success build the `ForkResult` with `selectLivingForks` (using the original's `lastPushDate` and the current time), keeping `inspected` and `livingTotal`
@@ -59,7 +59,7 @@ Constraints for every task: no new dependencies, no backend, no accounts. Do not
   - In `tests/App.test.tsx` add `vi.mock('../src/github/forks')` to the existing mock setup (a setup line only; no existing assertion changes) so existing DEAD-repo tests do not hit the network; add tests: forks appear before the report for a DEAD repo, `fetchForks` is not called for an ALIVE repo, a forks failure shows one line and the report still appears with no error state, a rate limit shows the reset time, AI Retry does not call `fetchForks` again, `runAutopsy` receives the fork summary, and the fallback report names the top fork
   - _Requirements: 1.1, 1.2, 2.1, 2.3, 3.1, 3.2, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 7.5, 7.7_
 
-- [ ] 8. Checkpoint - fork finder is shippable
+- [x] 8. Checkpoint - fork finder is shippable
   - Run `npm test`, `npm run lint` and `npm run build`; all must pass, including every existing test
   - Confirm with `git diff` that the only changed existing assertion is the provider prompt-keys assertion, and that the only other edit to an existing test is the added `fetchForks` mock line in `tests/App.test.tsx`
   - Confirm nothing under `.kiro/specs/autopsy-core/` changed and `package.json` has no new dependencies

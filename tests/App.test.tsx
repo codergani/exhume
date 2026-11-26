@@ -6,13 +6,17 @@ import type { RepoVitals } from '../src/github/client'
 
 vi.mock('../src/github/client', () => ({ fetchRepoVitals: vi.fn() }))
 vi.mock('../src/ai/provider', () => ({ runAutopsy: vi.fn() }))
+vi.mock('../src/github/forks', () => ({ fetchForks: vi.fn() }))
 
 import App from '../src/App'
 import { fetchRepoVitals } from '../src/github/client'
 import { runAutopsy } from '../src/ai/provider'
+import { fetchForks } from '../src/github/forks'
+import type { ForkCandidate } from '../src/lib/forks'
 
 const fetchMock = vi.mocked(fetchRepoVitals)
 const autopsyMock = vi.mocked(runAutopsy)
+const forksMock = vi.mocked(fetchForks)
 
 const vitals: RepoVitals = {
   lastPushDate: '2021-03-15T10:22:00Z',
@@ -40,6 +44,7 @@ function submit(url: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  forksMock.mockResolvedValue([])
   // Reduced motion: no stage pause, results shown instantly.
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
@@ -121,5 +126,118 @@ describe('App state machine', () => {
     expect(await screen.findByText(new RegExp(marker.replace('.', '\\.')))).not.toBeNull()
     expect(screen.getByText(/No commits in 50 months/)).not.toBeNull()
     expect(screen.getByText('831')).not.toBeNull()
+  })
+})
+describe('App fork finder', () => {
+  const recent = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  const stale = new Date(Date.now() - 800 * 24 * 3600 * 1000).toISOString()
+
+  function fork(owner: string, stars: number, overrides: Partial<ForkCandidate> = {}): ForkCandidate {
+    return {
+      owner,
+      name: 'hello-world',
+      htmlUrl: `https://github.com/${owner}/hello-world`,
+      starCount: stars,
+      lastPushDate: recent,
+      archived: false,
+      ...overrides,
+    }
+  }
+
+  it('DEAD repo: living forks appear before the report and reach runAutopsy', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    forksMock.mockResolvedValue([fork('alice', 40), fork('bob', 10)])
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    const reportNode = await screen.findByText(/Neglect and dependency rot/)
+    const link = screen.getByRole('link', { name: /alice\/hello-world/ })
+    expect(forksMock).toHaveBeenCalledWith('octocat', 'hello-world')
+    expect(
+      link.compareDocumentPosition(reportNode) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    const summary = autopsyMock.mock.calls[0][2]
+    expect(summary).toMatchObject({ status: 'available', livingCount: 2 })
+  })
+
+  it('ALIVE repo: fetchForks is not called and the summary is unavailable', async () => {
+    fetchMock.mockResolvedValue({ ...vitals, monthsSinceLastPush: 3, lastPushDate: recent })
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(forksMock).not.toHaveBeenCalled()
+    expect(autopsyMock.mock.calls[0][2]).toEqual({ status: 'unavailable' })
+  })
+
+  it('forks failure: one note line, report still shown, no error banner', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    forksMock.mockRejectedValue(new Error('boom'))
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(screen.getAllByText(/could not reach the fork registry/)).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(autopsyMock.mock.calls[0][2]).toEqual({ status: 'unavailable' })
+  })
+
+  it('forks rate limit: the line shows the reset time and the report still appears', async () => {
+    const resetAt = new Date('2025-01-01T01:00:00Z')
+    fetchMock.mockResolvedValue(vitals)
+    forksMock.mockRejectedValue(new GitHubRateLimitError(resetAt))
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(screen.getByText(new RegExp(resetAt.toLocaleTimeString()))).not.toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('AI Retry reuses the held fork result and never calls fetchForks again', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    forksMock.mockResolvedValue([fork('alice', 40)])
+    autopsyMock
+      .mockRejectedValueOnce(new AutopsyAiError('AI request failed: offline'))
+      .mockResolvedValueOnce(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByRole('alert')
+    expect(screen.getByRole('link', { name: /alice\/hello-world/ })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+
+    expect(await screen.findByText(/Neglect and dependency rot/)).not.toBeNull()
+    expect(forksMock).toHaveBeenCalledTimes(1)
+    expect(autopsyMock).toHaveBeenCalledTimes(2)
+    expect(autopsyMock.mock.calls[1][2]).toEqual(autopsyMock.mock.calls[0][2])
+    expect(autopsyMock.mock.calls[1][2]).toMatchObject({ status: 'available', livingCount: 1 })
+  })
+
+  it('schema error: the fallback report names the top fork', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    forksMock.mockResolvedValue([fork('alice', 40), fork('bob', 10)])
+    autopsyMock.mockRejectedValue(new AutopsySchemaError({ bad: true }))
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    expect(await screen.findByText(/the spirits are silent/)).not.toBeNull()
+    expect(screen.getByText(/living fork alice\/hello-world/)).not.toBeNull()
+  })
+
+  it('zero living forks: shows the no-living-forks line and the report', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    forksMock.mockResolvedValue([fork('alice', 40, { archived: true }), fork('bob', 10, { lastPushDate: stale })])
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    expect(await screen.findByText(/Neglect and dependency rot/)).not.toBeNull()
+    expect(screen.getByText(/no living forks found/)).not.toBeNull()
+    expect(autopsyMock.mock.calls[0][2]).toMatchObject({ status: 'available', livingCount: 0 })
   })
 })

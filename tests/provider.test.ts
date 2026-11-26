@@ -440,3 +440,64 @@ describe('runAutopsy: fork summary and recommendation', () => {
     expect('recommendation' in report).toBe(false)
   })
 })
+
+describe('runAutopsy: prompt and system instruction', () => {
+  function sentPayload() {
+    return JSON.parse(mockGenerateContent.mock.calls[0][0])
+  }
+
+  function instruction(): string {
+    const params = mockGetGenerativeModel.mock.calls[0] as unknown as [unknown, { systemInstruction: string }]
+    return params[1].systemInstruction
+  }
+
+  it('puts the computed status inside vitals (DEAD for 48 months)', async () => {
+    mockGenerateContent.mockResolvedValue({ response: { text: () => JSON.stringify(validPayload) } })
+    await runAutopsy(vitals, depRot)
+    expect(sentPayload().vitals).toEqual({ ...vitals, status: 'DEAD' })
+  })
+
+  it.each([
+    [3, false, 'ALIVE'],
+    [14, false, 'DYING'],
+    [3, true, 'DEAD'],
+  ])('status for %i months, archived=%s is %s', async (months, archived, expected) => {
+    mockGenerateContent.mockResolvedValue({ response: { text: () => JSON.stringify(validPayload) } })
+    await runAutopsy({ ...vitals, monthsSinceLastPush: months, archived }, depRot)
+    expect(sentPayload().vitals.status).toBe(expected)
+  })
+
+  it('keeps the top-level payload keys at deps, forks, vitals', async () => {
+    mockGenerateContent.mockResolvedValue({ response: { text: () => JSON.stringify(validPayload) } })
+    await runAutopsy(vitals, depRot)
+    expect(Object.keys(sentPayload()).sort()).toEqual(['deps', 'forks', 'vitals'])
+  })
+
+  it('instruction states the status, step, content and tone rules', async () => {
+    mockGenerateContent.mockResolvedValue({ response: { text: () => JSON.stringify(validPayload) } })
+    await runAutopsy(vitals, depRot)
+    const text = instruction()
+
+    expect(text).toContain('vitals.status is authoritative')
+    expect(text).toContain('never say the repository is dead')
+    expect(text).toContain('"stable"')
+    expect(text).toContain('specific cause of death')
+    expect(text).toContain('concrete value')
+    expect(text).toContain('imperative')
+    expect(text).toContain('under 25 words')
+    expect(text).toContain('step 1 must say whether to adopt that fork or revive the original')
+    expect(text).toContain('Never mention internal limits')
+    expect(text).toContain('do not discuss dependencies')
+    expect(text).toContain('dry, terse, slightly spooky')
+    expect(text).toContain('Never jokey')
+  })
+
+  it('instruction still describes the schema and the optional recommendation', async () => {
+    mockGenerateContent.mockResolvedValue({ response: { text: () => JSON.stringify(validPayload) } })
+    await runAutopsy(vitals, depRot)
+    const text = instruction()
+    expect(text).toContain('"causeOfDeath"')
+    expect(text).toContain('3 to 7 items')
+    expect(text).toContain('"recommendation"')
+  })
+})

@@ -8,6 +8,7 @@ import { getAI, getGenerativeModel, GoogleAIBackend } from 'firebase/ai'
 import type { RepoVitals } from '../github/client'
 import type { DepRotReport } from '../github/deps'
 import type { ForkSummary } from '../lib/forks'
+import { classifyStatus } from '../lib/classifyStatus'
 import { autopsyReportSchema } from './schema'
 import type { AutopsyReport } from './fallback'
 import { AutopsyAiError, AutopsySchemaError } from '../errors'
@@ -19,10 +20,26 @@ export const MODEL_NAME = 'gemini-3.8-flash'
 
 const APP_NAME = 'exhume-ai'
 
-const SYSTEM_INSTRUCTION = `You are a software archaeologist. Given vital signs and dependency rot data for a GitHub repository, produce a clinical autopsy report as JSON. Do not include any commentary outside the JSON object. Respond only with valid JSON matching this schema exactly:
+const SYSTEM_INSTRUCTION = `You are a software archaeologist. Given vital signs, dependency data and fork data for a GitHub repository, produce an autopsy report as JSON. Do not include any commentary outside the JSON object. Respond only with valid JSON matching this schema exactly:
 { "causeOfDeath": string, "severity": "critical"|"serious"|"stable", "steps": [{ "order": number, "action": string, "rationale": string }] }
-steps must contain 3 to 7 items numbered sequentially from 1. Be terse and clinical.
-If the payload's forks has status "available" and lists at least one fork, you may add an optional "recommendation" object: { "kind": "adopt-fork" | "revive-original", "fork": "owner/name" (only for adopt-fork, and it must be one of the listed forks), "reason": string }. Omit recommendation entirely if unsure.`
+steps must contain 3 to 7 items numbered sequentially from 1.
+
+Status rules:
+- vitals.status is authoritative. Never contradict it.
+- If vitals.status is "ALIVE", never say the repository is dead. Use causeOfDeath to say what to watch instead, and set severity to "stable".
+- If vitals.status is "DYING" or "DEAD", give a specific cause of death grounded in the vitals.
+
+Step rules:
+- Every step cites at least one concrete value from the input (months since last push, stars, open issues, or a named fork as owner/name) and ends with a short reason.
+- Write each action as an imperative sentence. Keep each step, action and rationale together, under 25 words.
+- If forks.status is "available" and forks.top lists at least one fork, step 1 must say whether to adopt that fork or revive the original, and must name the fork as owner/name.
+
+Content rules:
+- Never mention internal limits such as analysis being skipped, unavailable or missing. If dependency data is missing or lists nothing, do not discuss dependencies. If forks.status is "unavailable", do not discuss forks.
+
+Tone: dry, terse, slightly spooky. Never jokey.
+
+If forks.status is "available" and lists at least one fork, you may add an optional "recommendation" object: { "kind": "adopt-fork" | "revive-original", "fork": "owner/name" (only for adopt-fork, and it must be one of the listed forks), "reason": string }. Omit recommendation entirely if unsure.`
 
 const REQUIRED_ENV = [
   'VITE_FIREBASE_API_KEY',
@@ -32,7 +49,13 @@ const REQUIRED_ENV = [
 ] as const
 
 function buildPrompt(vitals: RepoVitals, depRot: DepRotReport, forks?: ForkSummary): string {
-  return JSON.stringify({ vitals, deps: depRot, forks: forks ?? { status: 'unavailable' } })
+  // The model is told vitals.status is authoritative, so the payload must carry it.
+  const status = classifyStatus(vitals)
+  return JSON.stringify({
+    vitals: { ...vitals, status },
+    deps: depRot,
+    forks: forks ?? { status: 'unavailable' },
+  })
 }
 
 /**

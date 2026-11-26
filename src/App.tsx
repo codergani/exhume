@@ -7,11 +7,15 @@ import { classifyStatus } from './lib/classifyStatus'
 import { fetchRepoVitals } from './github/client'
 import type { RepoVitals } from './github/client'
 import type { DepRotReport } from './github/deps'
+import { fetchForks } from './github/forks'
+import { buildForkSummary, monthsSince, selectLivingForks } from './lib/forks'
+import type { ForkResult } from './lib/forks'
 import { runAutopsy } from './ai/provider'
 import { buildFallbackReport } from './ai/fallback'
-import { AutopsyAiError, AutopsySchemaError } from './errors'
+import { AutopsyAiError, AutopsySchemaError, GitHubRateLimitError } from './errors'
 import { TerminalOutput } from './ui/TerminalOutput'
 import { VitalsPanel } from './ui/VitalsPanel'
+import { ForksPanel } from './ui/ForksPanel'
 import { ErrorBanner } from './ui/ErrorBanner'
 import { progressLines, reportLines } from './ui/lines'
 import { prefersReducedMotion } from './ui/motion'
@@ -34,6 +38,33 @@ function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
 }
 
+/** Looks up living forks of a DEAD or DYING repo. Never throws: failures become 'unavailable'. */
+async function findForks(owner: string, repo: string, vitals: RepoVitals): Promise<ForkResult> {
+  try {
+    const forks = await fetchForks(owner, repo)
+    const now = new Date()
+    const original = Date.parse(vitals.lastPushDate)
+    const livingTotal = forks.filter(
+      (f) =>
+        !f.archived && monthsSince(f.lastPushDate, now) < 12 && Date.parse(f.lastPushDate) > original,
+    ).length
+    const living = selectLivingForks(forks, vitals.lastPushDate, now)
+    return { status: 'available', living, inspected: forks.length, livingTotal }
+  } catch (err) {
+    if (err instanceof GitHubRateLimitError) {
+      const time = err.resetAt.toLocaleTimeString()
+      return {
+        status: 'unavailable',
+        message: `the fork registry is sealed until ${time}. the plan below does not depend on it; try again after then.`,
+      }
+    }
+    return {
+      status: 'unavailable',
+      message: 'could not reach the fork registry. the plan below does not depend on it.',
+    }
+  }
+}
+
 function App() {
   const [state, setState] = useState<AppState>({ stage: 'IDLE' })
   const [url, setUrl] = useState('')
@@ -42,20 +73,25 @@ function App() {
   const runRef = useRef(0)
   // In-memory cache of GitHub vitals (unauthenticated API allows 60 requests/hour).
   const vitalsCache = useRef(new Map<string, RepoVitals>())
+  // The forks step outcome lives outside AppState. Only successful lookups are cached.
+  const [forkResult, setForkResult] = useState<ForkResult | null>(null)
+  const forksCache = useRef(new Map<string, ForkResult>())
 
   async function consult(
     vitals: RepoVitals,
     depRot: DepRotReport,
+    forks: ForkResult,
     isCurrent: () => boolean,
   ) {
     setState({ stage: 'CONSULTING', vitals, depRot })
+    const summary = buildForkSummary(forks, new Date())
     try {
-      const report = await runAutopsy(vitals, depRot)
+      const report = await runAutopsy(vitals, depRot, summary)
       if (isCurrent()) setState({ stage: 'RESULTS', vitals, depRot, report })
     } catch (err) {
       if (!isCurrent()) return
       if (err instanceof AutopsySchemaError) {
-        const report = buildFallbackReport(vitals, depRot)
+        const report = buildFallbackReport(vitals, depRot, summary)
         setState({ stage: 'FALLBACK', vitals, depRot, report })
       } else {
         const error = err instanceof AutopsyAiError ? err : new AutopsyAiError(toError(err).message)
@@ -91,25 +127,36 @@ function App() {
     if (!isCurrent()) return
 
     setState({ stage: 'EXAMINING', vitals })
+
+    let forks: ForkResult = { status: 'skipped' }
+    if (classifyStatus(vitals) !== 'ALIVE') {
+      forks = forksCache.current.get(key) ?? (await findForks(parsed.owner, parsed.repo, vitals))
+      if (!isCurrent()) return
+      if (forks.status === 'available') forksCache.current.set(key, forks)
+    }
+    setForkResult(forks)
+
     if (!prefersReducedMotion()) {
       await new Promise((resolve) => setTimeout(resolve, STAGE_PAUSE_MS))
       if (!isCurrent()) return
     }
 
-    await consult(vitals, SKIPPED_DEP_ROT, isCurrent)
+    await consult(vitals, SKIPPED_DEP_ROT, forks, isCurrent)
   }
 
   /** ERROR_AI -> CONSULTING with the vitals already held; GitHub is not called again. */
   function handleRetry() {
     if (state.stage !== 'ERROR_AI') return
+    if (!forkResult) return
     const { vitals, depRot } = state
     const runId = ++runRef.current
-    void consult(vitals, depRot, () => runRef.current === runId)
+    void consult(vitals, depRot, forkResult, () => runRef.current === runId)
   }
 
   function handleReset() {
     runRef.current++
     setInputError(null)
+    setForkResult(null)
     setState({ stage: 'IDLE' })
   }
 
@@ -149,6 +196,8 @@ function App() {
       )}
 
       {vitals && <VitalsPanel vitals={vitals} status={classifyStatus(vitals)} />}
+
+      {forkResult && <ForksPanel result={forkResult} />}
 
       {state.stage === 'ERROR_GITHUB' && (
         <>
