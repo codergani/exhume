@@ -38,6 +38,19 @@ const SKIPPED_DEP_ROT: DepRotReport = {
   skipReason: 'Dependency analysis is not available in this build',
 }
 
+const RESTING_LINE = 'the spirits are resting for today; instrument readings only.'
+
+/**
+ * True for an AutopsyAiError flagged quotaExhausted (HTTP 429, per-day quota). Checked by
+ * the flag, not by importing the provider's class, so it also works when the provider is mocked.
+ */
+function isQuotaExhausted(err: unknown): boolean {
+  return (
+    err instanceof AutopsyAiError &&
+    (err as AutopsyAiError & { quotaExhausted?: boolean }).quotaExhausted === true
+  )
+}
+
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err))
 }
@@ -112,6 +125,8 @@ function App() {
   const forksCache = useRef(new Map<string, ForkResult>())
   // The README step outcome also lives outside AppState. Only available results are cached.
   const [readmeResult, setReadmeResult] = useState<ReadmeResult | null>(null)
+  // True when the FALLBACK report is shown because the AI's daily quota is used up.
+  const [restingToday, setRestingToday] = useState(false)
   const readmeCache = useRef(new Map<string, ReadmeResult>())
 
   async function consult(
@@ -121,6 +136,7 @@ function App() {
     readme: ReadmeResult,
     isCurrent: () => boolean,
   ) {
+    setRestingToday(false)
     setState({ stage: 'CONSULTING', vitals, depRot })
     const summary = buildForkSummary(forks, new Date())
     try {
@@ -128,7 +144,10 @@ function App() {
       if (isCurrent()) setState({ stage: 'RESULTS', vitals, depRot, report })
     } catch (err) {
       if (!isCurrent()) return
-      if (err instanceof AutopsySchemaError) {
+      if (err instanceof AutopsySchemaError || isQuotaExhausted(err)) {
+        // Schema failure and an exhausted daily quota both end in the deterministic report.
+        // A quota failure is not retryable, so there is no Retry button for it.
+        setRestingToday(isQuotaExhausted(err))
         const report = buildFallbackReport(vitals, depRot, summary)
         setState({ stage: 'FALLBACK', vitals, depRot, report })
       } else {
@@ -201,6 +220,7 @@ function App() {
     setInputError(null)
     setForkResult(null)
     setReadmeResult(null)
+    setRestingToday(false)
     setState({ stage: 'IDLE' })
   }
 
@@ -272,6 +292,12 @@ function App() {
           typewriterActive
           label={state.stage === 'FALLBACK' ? 'Autopsy report (instrument readings only)' : 'Autopsy report'}
         />
+      )}
+
+      {state.stage === 'FALLBACK' && restingToday && (
+        <p className="forks-note" role="status">
+          {RESTING_LINE}
+        </p>
       )}
 
       {readmeResult && finished && <ReadmePanel result={readmeResult} />}

@@ -97,6 +97,26 @@ function getFirebaseApp() {
   return initializeApp(readFirebaseConfig(), APP_NAME)
 }
 
+/**
+ * An AutopsyAiError for an exhausted PER-DAY quota (HTTP 429). It is never retried:
+ * waiting seconds cannot help. App.tsx reads `quotaExhausted` to show the fallback report.
+ */
+export class AutopsyQuotaError extends AutopsyAiError {
+  readonly quotaExhausted = true
+}
+
+/** True for an HTTP 429 whose message or error details mention a per-day quota. */
+function isDailyQuota(status: number | undefined, err: unknown, msg: string): boolean {
+  if (status !== 429) return false
+  let details: string
+  try {
+    const data = (err as { customErrorData?: { errorDetails?: unknown } } | null)?.customErrorData
+    details = data?.errorDetails === undefined ? '' : JSON.stringify(data.errorDetails)
+  } catch {
+    details = ''
+  }
+  return /per[\s_-]?day/i.test(`${msg} ${details}`)
+}
 /** HTTP statuses worth retrying. 400, 401, 403 and 404 are permanent and never retried. */
 const TRANSIENT_STATUSES: ReadonlySet<number> = new Set([429, 500, 503])
 
@@ -120,7 +140,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Calls generateContent, retrying only transient HTTP failures (429, 500, 503)
+ * Calls generateContent, retrying only transient HTTP failures (429 per-minute, 500, 503)
  * with exponential backoff. Anything else fails immediately. Error messages
  * carry the status and the SDK message only; no key or token is logged.
  */
@@ -134,6 +154,9 @@ async function generateWithBackoff(
     } catch (err) {
       const status = httpStatusOf(err)
       const msg = err instanceof Error ? err.message : String(err)
+      if (isDailyQuota(status, err, msg)) {
+        throw new AutopsyQuotaError(`AI daily quota exhausted: ${msg}`, status)
+      }
       const transient = status !== undefined && TRANSIENT_STATUSES.has(status)
 
       if (!transient) {

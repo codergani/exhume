@@ -425,3 +425,75 @@ describe('App readme explainer', () => {
     expect(readmeMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('App daily quota fallback', () => {
+  const RESTING = 'the spirits are resting for today; instrument readings only.'
+  const MARKER = 'the spirits are silent \u2014 showing instrument readings only.'
+
+  const quotaError = () =>
+    Object.assign(new AutopsyAiError('AI daily quota exhausted: PerDay', 429), { quotaExhausted: true })
+
+  it('quota error: FALLBACK with the marker line, the resting line, vitals, and no Retry button', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    autopsyMock.mockRejectedValue(quotaError())
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    expect(await screen.findByText(RESTING)).not.toBeNull()
+    expect(screen.getByText(new RegExp(MARKER.replace('.', '\\.')))).not.toBeNull()
+    expect(screen.getByText(/No commits in 50 months/)).not.toBeNull() // deterministic report
+    expect(screen.getByText('831')).not.toBeNull() // vitals stay
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull() // not the ERROR_AI banner
+    expect(autopsyMock).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /analyse another/i })).not.toBeNull()
+  })
+
+  it('a plain AI transport error still shows the error banner with Retry and no resting line', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    autopsyMock.mockRejectedValue(new AutopsyAiError('AI request failed: offline'))
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    expect((await screen.findByRole('alert')).textContent).toContain('AI request failed: offline')
+    expect(screen.getByRole('button', { name: /retry/i })).not.toBeNull()
+    expect(screen.queryByText(RESTING)).toBeNull()
+  })
+
+  it('a schema error shows the marker line but not the resting line', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    autopsyMock.mockRejectedValue(new AutopsySchemaError({ bad: true }))
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    expect(await screen.findByText(new RegExp(MARKER.replace('.', '\\.')))).not.toBeNull()
+    expect(screen.queryByText(RESTING)).toBeNull()
+  })
+
+  it('the resting line disappears after Analyse another', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    autopsyMock.mockRejectedValue(quotaError())
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+    await screen.findByText(RESTING)
+
+    fireEvent.click(screen.getByRole('button', { name: /analyse another/i }))
+
+    expect(screen.queryByText(RESTING)).toBeNull()
+    expect(screen.getByLabelText(/repository url/i)).not.toBeNull()
+  })
+
+  it('the resting line does not carry over to the next analysis when it succeeds', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    autopsyMock.mockRejectedValueOnce(quotaError()).mockResolvedValueOnce(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+    await screen.findByText(RESTING)
+
+    fireEvent.click(screen.getByRole('button', { name: /analyse another/i }))
+    submit('https://github.com/octocat/hello-world')
+
+    expect(await screen.findByText(/Neglect and dependency rot/)).not.toBeNull()
+    expect(screen.queryByText(RESTING)).toBeNull()
+  })
+})

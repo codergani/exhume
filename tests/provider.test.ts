@@ -614,3 +614,113 @@ describe('runAutopsy: readme and overview', () => {
     expect(sentPayload().readme.text).toBe('SECRET-README-TEXT')
   })
 })
+
+const { AutopsyQuotaError } = await import('../src/ai/provider')
+
+describe('runAutopsy: per-day quota (HTTP 429)', () => {
+  /** Mimics a Firebase AIError: HTTP status in customErrorData and a message. */
+  function status429(message: string) {
+    return Object.assign(new Error(message), { customErrorData: { status: 429 } })
+  }
+
+  const dailyMessages = [
+    'Error fetching: [429 ] Quota exceeded for metric generate_content_free_tier_requests, limit: 20 quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier',
+    'Error fetching: [429 ] You exceeded your current quota: 20 requests per day for this model',
+    'Error fetching: [429 ] Quota exceeded: per-day limit reached',
+  ]
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it.each(dailyMessages)('does not retry and flags quotaExhausted: %s', async (message) => {
+    mockGenerateContent.mockRejectedValue(status429(message))
+
+    // No timers are advanced: a retry would need a 1s wait, so this resolves only if none is scheduled.
+    const err = await runAutopsy(vitals, depRot).catch((e) => e)
+
+    expect(err).toBeInstanceOf(AutopsyAiError)
+    expect(err).toBeInstanceOf(AutopsyQuotaError)
+    expect(err.quotaExhausted).toBe(true)
+    expect(err.statusCode).toBe(429)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('detects the per-day quota in the error details too', async () => {
+    const err429 = Object.assign(new Error('Error fetching: [429 ] Resource exhausted'), {
+      customErrorData: {
+        status: 429,
+        errorDetails: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }],
+      },
+    })
+    mockGenerateContent.mockRejectedValue(err429)
+
+    const err = await runAutopsy(vitals, depRot).catch((e) => e)
+
+    expect(err.quotaExhausted).toBe(true)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('a per-minute 429 keeps the backoff: retried after 1s, then succeeds, no quota flag', async () => {
+    mockGenerateContent
+      .mockRejectedValueOnce(
+        status429('Error fetching: [429 ] Quota exceeded: GenerateRequestsPerMinutePerProjectPerModel'),
+      )
+      .mockResolvedValueOnce(okResponse())
+
+    const pending = runAutopsy(vitals, depRot)
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+
+    await expect(pending).resolves.toMatchObject({ severity: 'critical' })
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+  })
+
+  it('a per-minute 429 that never recovers fails after 4 attempts without the quota flag', async () => {
+    mockGenerateContent.mockRejectedValue(status429('Error fetching: [429 ] rate limited, try again shortly'))
+
+    const pending = runAutopsy(vitals, depRot).catch((e) => e)
+    await vi.advanceTimersByTimeAsync(7000)
+    const err = await pending
+
+    expect(err).toBeInstanceOf(AutopsyAiError)
+    expect(err.quotaExhausted).toBeUndefined()
+    expect(err.message).toContain('after 4 attempts')
+    expect(mockGenerateContent).toHaveBeenCalledTimes(4)
+  })
+
+  it('only a 429 counts: a 500 that mentions per day is still a normal transient failure', async () => {
+    mockGenerateContent
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Error fetching: [500 ] per day batch job failed'), {
+          customErrorData: { status: 500 },
+        }),
+      )
+      .mockResolvedValueOnce(okResponse())
+
+    const pending = runAutopsy(vitals, depRot)
+    await vi.advanceTimersByTimeAsync(1000)
+
+    await expect(pending).resolves.toMatchObject({ severity: 'critical' })
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not leak README text or the key into the quota error message', async () => {
+    mockGenerateContent.mockRejectedValue(status429(dailyMessages[0]))
+
+    const err = await runAutopsy(vitals, depRot, undefined, {
+      status: 'available',
+      truncated: false,
+      text: 'SECRET-README-TEXT',
+    }).catch((e) => e)
+
+    expect(err.message).not.toContain('SECRET-README-TEXT')
+    expect(err.message).not.toContain(SECRET)
+  })
+})
