@@ -1,0 +1,60 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. `src/lib/caseFile.ts` - pure loader with tests": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693572321
+      },
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693737893
+      }
+    ],
+    "2. Placeholder case data, bundling index and shipped-case test": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693738909
+      },
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693879085
+      }
+    ],
+    "3. UI components: `CaseFileList`, `SampleLabel` and theme rules": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693879276
+      },
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693964423
+      }
+    ],
+    "4. `src/App.tsx` wiring and appended App tests": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693964096
+      },
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795694317157
+      }
+    ],
+    "5. Checkpoint - saved case files phase 1 is shippable": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795694475382
+      }
+    ]
+  }
+}

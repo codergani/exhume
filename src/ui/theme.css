@@ -316,3 +316,49 @@ body {
 .readme a {
   color: var(--crypt-glow);
 }
+
+.cases {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--crypt-panel);
+  border: 1px solid var(--crypt-line);
+  border-radius: 2px;
+}
+
+.cases h2 {
+  margin: 0 0 8px;
+}
+
+.cases ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cases li {
+  padding: 4px 0;
+}
+
+.cases button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--crypt-text);
+  background: transparent;
+  border: 1px solid var(--crypt-line);
+}
+
+.cases button:focus-visible {
+  outline: 2px solid var(--crypt-glow);
+  outline-offset: 2px;
+}
+
+.sample-label {
+  margin: 16px 0;
+  padding: 8px 12px;
+  color: var(--crypt-text);
+  background: var(--crypt-panel);
+  border: 1px solid var(--crypt-dying);
+  border-radius: 2px;
+}

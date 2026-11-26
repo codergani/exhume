@@ -56,3 +56,36 @@ describe('ReadmePanel', () => {
     expect(screen.queryByRole('region')).toBeNull()
   })
 })
+
+describe('ReadmePanel savedExcerpt', () => {
+  it('shows saved excerpt and no link when savedExcerpt is true', () => {
+    const { container } = render(
+      <ReadmePanel
+        result={{ status: 'available', text: 'sample body', truncated: false, url: '' }}
+        savedExcerpt
+      />,
+    )
+    expect(container.querySelector('a')).toBeNull()
+    expect(screen.getByText('saved excerpt')).not.toBeNull()
+    expect(screen.getByText('sample body')).not.toBeNull()
+  })
+
+  it('uses the short truncation note when savedExcerpt is true', () => {
+    render(
+      <ReadmePanel
+        result={{ status: 'available', text: 'x', truncated: true, url: '' }}
+        savedExcerpt
+      />,
+    )
+    expect(screen.getByText('[cut at 6000 characters.]')).not.toBeNull()
+    expect(screen.queryByText(/original README/)).toBeNull()
+  })
+
+  it('still renders the original link when the prop is omitted', () => {
+    const { container } = render(
+      <ReadmePanel result={{ status: 'available', text: 'x', truncated: false, url }} />,
+    )
+    expect(container.querySelectorAll('a')).toHaveLength(1)
+    expect(screen.queryByText('saved excerpt')).toBeNull()
+  })
+})

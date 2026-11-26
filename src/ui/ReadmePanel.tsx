@@ -2,9 +2,10 @@ import type { ReadmeResult } from '../lib/readme'
 
 interface ReadmePanelProps {
   result: ReadmeResult
+  savedExcerpt?: boolean
 }
 
-export function ReadmePanel({ result }: ReadmePanelProps) {
+export function ReadmePanel({ result, savedExcerpt = false }: ReadmePanelProps) {
   if (result.status === 'unavailable') {
     return (
       <p className="readme-note" role="status">
@@ -21,12 +22,18 @@ export function ReadmePanel({ result }: ReadmePanelProps) {
       </pre>
       {result.truncated && (
         <p className="readme-note">
-          [cut at 6000 characters. read the rest at the original README.]
+          {savedExcerpt
+            ? '[cut at 6000 characters.]'
+            : '[cut at 6000 characters. read the rest at the original README.]'}
         </p>
       )}
-      <a href={result.url} target="_blank" rel="noopener noreferrer">
-        Open the original README on GitHub
-      </a>
+      {savedExcerpt ? (
+        <p className="readme-note">saved excerpt</p>
+      ) : (
+        <a href={result.url} target="_blank" rel="noopener noreferrer">
+          Open the original README on GitHub
+        </a>
+      )}
     </section>
   )
 }

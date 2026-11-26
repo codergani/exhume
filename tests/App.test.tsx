@@ -363,7 +363,7 @@ describe('App readme explainer', () => {
     expect(autopsyMock.mock.calls[0][3]).toEqual({
       status: 'available',
       truncated: false,
-      text: '# Widget\n\nA tiny library.',
+      text: 'Widget\n\nA tiny library.',
     })
   })
 
@@ -577,5 +577,167 @@ describe('App report headings by status', () => {
     expect(text).toContain('WHAT TO WATCH')
     expect(text).toContain('WAKE-UP PLAN')
     expect(text).not.toMatch(/dead|death|abandon/i)
+  })
+})
+
+describe('App readme cleanup', () => {
+  const BADGE = '[![CI](https://x/b.svg)](https://ci)'
+
+  it('a markup-heavy README is shown cleaned and sent cleaned', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue(
+      '<p align="center"><img src="logo.png"></p>\n\n' +
+        BADGE +
+        '\n\n# Widget\n\nSee [the docs](https://docs.example) for more.',
+    )
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    const pane = await screen.findByRole('region', { name: /readme text/i })
+    const cleaned = 'Widget\n\nSee the docs for more.'
+    expect(pane.textContent).toBe(cleaned)
+    expect(autopsyMock.mock.calls[0][3]).toEqual({ status: 'available', truncated: false, text: cleaned })
+  })
+
+  it('a badges-only README shows the missing line and the report still appears', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue(BADGE + '\n\n' + BADGE)
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    expect(screen.getAllByText('no readme was left with these remains.')).toHaveLength(1)
+    expect(autopsyMock.mock.calls[0][3]).toEqual({ status: 'unavailable' })
+  })
+
+  it('cleaning happens before the 6000 limit', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('a'.repeat(5000) + '\n' + BADGE.repeat(90))
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    const pane = await screen.findByRole('region', { name: /readme text/i })
+    expect(pane.textContent).toBe('a'.repeat(5000))
+    expect(screen.queryByText(/cut at 6000 characters/)).toBeNull()
+    expect(autopsyMock.mock.calls[0][3]).toMatchObject({ status: 'available', truncated: false })
+  })
+
+  it('the cache still works after cleaning', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue(BADGE + '\n\n# Widget\n\nA tiny library.')
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    submit('https://github.com/octocat/hello-world')
+
+    await screen.findByText(/Neglect and dependency rot/)
+    fireEvent.click(screen.getByRole('button', { name: /analyse another/i }))
+    submit('https://github.com/Octocat/Hello-World')
+
+    expect(await screen.findByText(/A tiny library\./)).not.toBeNull()
+    expect(autopsyMock).toHaveBeenCalledTimes(2)
+    expect(readmeMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('App saved case files', () => {
+  function openSample() {
+    fireEvent.click(screen.getByRole('button', { name: /lanternworks\/lantern/ }))
+  }
+
+  it('IDLE shows the case list heading and the sample button', () => {
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Saved case files' })).not.toBeNull()
+    expect(screen.getByRole('button', { name: /lanternworks\/lantern/ })).not.toBeNull()
+  })
+
+  it('the submit button is still the only button matching /exhume/i', () => {
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: /exhume/i })).not.toBeNull()
+    const matching = screen
+      .getAllByRole('button')
+      .filter(
+        (b) => /exhume/i.test(b.textContent ?? '') || /exhume/i.test(b.getAttribute('aria-label') ?? ''),
+      )
+    expect(matching).toHaveLength(1)
+  })
+
+  it('opening the sample shows it through the panels and makes no network or AI call', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('no network'))
+    try {
+      render(<App />)
+      openSample()
+
+      const label = screen.getByRole('note')
+      expect(label.textContent).toContain('saved sample')
+      expect(label.textContent).toContain('fictional repository')
+      expect(screen.getByText('HIBERNATING')).not.toBeNull()
+      expect(await screen.findByText(/Still breathing/)).not.toBeNull()
+      expect(screen.getByText(/Purpose:/)).not.toBeNull()
+      expect(screen.getByText(/WAKE-UP PLAN/)).not.toBeNull()
+      const pane = screen.getByRole('region', { name: /readme text/i })
+      expect(pane.textContent).toContain('lantern watch')
+      expect(screen.getByText('saved excerpt')).not.toBeNull()
+      const readme = screen.getByRole('region', { name: /readme excerpt/i })
+      const githubLinks = Array.from(readme.querySelectorAll('a')).filter((a) =>
+        (a.getAttribute('href') ?? '').includes('github.com'),
+      )
+      expect(githubLinks).toHaveLength(0)
+      expect(screen.getByRole('button', { name: /analyse another/i })).not.toBeNull()
+
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(forksMock).not.toHaveBeenCalled()
+      expect(readmeMock).not.toHaveBeenCalled()
+      expect(autopsyMock).not.toHaveBeenCalled()
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('no alert is shown after opening the sample', () => {
+    render(<App />)
+    openSample()
+
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('the progress region is not shown for a sample', () => {
+    render(<App />)
+    openSample()
+
+    expect(screen.queryByRole('region', { name: 'Progress' })).toBeNull()
+  })
+
+  it('Analyse another clears the label and shows the form and the list again', () => {
+    render(<App />)
+    openSample()
+    fireEvent.click(screen.getByRole('button', { name: /analyse another/i }))
+
+    expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.getByLabelText(/repository url/i)).not.toBeNull()
+    expect(screen.getByRole('heading', { name: 'Saved case files' })).not.toBeNull()
+  })
+
+  it('a real analysis after a sample fetches live data, has no label and keeps the README link', async () => {
+    fetchMock.mockResolvedValue(vitals)
+    readmeMock.mockResolvedValue('# Widget\n\nA tiny library.')
+    autopsyMock.mockResolvedValue(report)
+    render(<App />)
+    openSample()
+    fireEvent.click(screen.getByRole('button', { name: /analyse another/i }))
+    submit('https://github.com/octocat/hello-world')
+
+    expect(await screen.findByText(/Neglect and dependency rot/)).not.toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.getByRole('link', { name: /original readme/i })).not.toBeNull()
+    expect(screen.queryByText('saved excerpt')).toBeNull()
   })
 })

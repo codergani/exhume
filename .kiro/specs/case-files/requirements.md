@@ -96,7 +96,7 @@ Open questions for the design phase and the project owner:
 5. WHEN a Case_File is loaded, THEN THE VitalsPanel SHALL show the vitals of the Case_File with the status from `classifyStatus` applied to the stored vitals.
 6. WHEN a Case_File is loaded, THEN THE ForksPanel SHALL show the stored forks, with each link built from the validated `htmlUrl`.
 7. WHEN a Case_File is loaded, THEN THE report TerminalOutput SHALL show the stored Report with the typewriter effect, and SHALL show the overview first when the Report contains one.
-8. WHEN a Case_File is loaded, THEN THE ReadmePanel SHALL show the stored README_Excerpt with the README_Link built by `buildReadmeUrl(owner, repo)`.
+8. WHEN a Case_File is loaded, THEN THE ReadmePanel SHALL show the stored README_Excerpt with the plain text "saved excerpt" in place of the README_Link, and SHALL NOT link to GitHub.
 9. WHEN a Case_File is loaded, THEN THE Exhume SHALL NOT call `runAutopsy`, the GitHub client or the AI_Provider.
 10. WHEN a Case_File is loaded, THEN THE Exhume SHALL NOT read from or write to the in-memory vitals cache, forks cache or README cache.
 11. WHEN a real analysis of the same repository follows a loaded Case_File, THEN THE Exhume SHALL fetch live data and SHALL NOT serve the frozen data.
@@ -118,7 +118,7 @@ Open questions for the design phase and the project owner:
 
 #### Acceptance Criteria
 1. THE Exhume SHALL render all Case_File text as text nodes, without `dangerouslySetInnerHTML` and without interpreting HTML or Markdown.
-2. THE Exhume SHALL create links from a Case_File only for the validated fork URLs and for the README_Link.
+2. THE Exhume SHALL create links from a Case_File only for the validated fork URLs.
 3. THE Exhume SHALL render each such link with `target="_blank"` and `rel="noopener noreferrer"`.
 4. WHILE the user prefers reduced motion, THE Exhume SHALL show a loaded Case_File without the typewriter animation.
 5. THE Case_File_List SHALL be reachable and operable by keyboard alone.

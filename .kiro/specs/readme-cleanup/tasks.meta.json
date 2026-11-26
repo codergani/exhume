@@ -1,0 +1,36 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. `src/lib/readmeClean.ts` and `tests/readmeClean.test.ts`": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693190121
+      },
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693281846
+      }
+    ],
+    "2. Wire into `src/App.tsx` and update `tests/App.test.tsx`": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693282277
+      },
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693360865
+      }
+    ],
+    "3. Checkpoint - README cleanup is shippable": [
+      {
+        "executionId": "cd3012ec-c192-4bd1-87c9-499988abe516",
+        "chatSessionId": "sess_dda9c464-f6ce-4848-9182-4d1adddb7c67",
+        "timestamp": 1795693361485
+      }
+    ]
+  }
+}

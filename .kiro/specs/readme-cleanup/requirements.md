@@ -6,7 +6,7 @@ Exhume shows a bounded README excerpt in the README panel and sends the same exc
 This spec builds on readme-explainer and does not redefine it. `buildReadmeExcerpt`, `README_MAX_CHARS`, `ReadmeResult`, `ReadmePayload`, the README panel, the AI payload, the Zod schema, the state machine, the caches, the AI Retry button and the fallback behaviour are unchanged.
 
 Assumptions:
-- "3 or more blank lines" means 3 or more consecutive empty lines, which is 4 or more consecutive newline characters. Two blank lines are left alone; three or more become one. This is an open question for the project owner; the alternative reading ("2 or more blank lines", which would use 3 or more newlines) would change one number in the design.
+- Decided by the project owner: 2 or more consecutive blank lines (3 or more consecutive newline characters) become exactly 1 blank line. A single blank line is left alone.
 - The cleaner is a readability aid. It is not a security measure and does not remove instructions hidden in README text; the existing untrusted-data instruction to the AI stays as is.
 - Known and accepted limits: a URL containing `)` is cut at the first `)`; reference-style links and images (`[text][ref]`, `[ref]: url`) are not handled; fenced code blocks are not treated specially, so a `# comment` line inside a code fence loses its `#`; HTML entities such as `&amp;` stay as written; text between an opening and closing HTML tag is kept.
 - No property-based test is added in this spec. The existing property-based test for `buildReadmeExcerpt` stays valid because that function is unchanged.
@@ -36,8 +36,8 @@ Assumptions:
 6. WHEN link text contains an HTML tag, as in `[<b>x</b>](u)`, THEN THE README_Cleaner SHALL return `x`.
 7. WHEN a line starts with 0 to 3 spaces or tabs, then 1 to 6 `#` characters, then a space or tab, THEN THE README_Cleaner SHALL remove that prefix from the line.
 8. WHEN a `#` run is not followed by a space or tab, or has more than 6 `#` characters, as in `#hashtag`, `#!/bin/sh` and `####### seven`, THEN THE README_Cleaner SHALL leave the line unchanged.
-9. WHEN the text contains 3 or more consecutive Blank_Lines, THEN THE README_Cleaner SHALL replace them with exactly 1 Blank_Line.
-10. WHEN the text contains 1 or 2 consecutive Blank_Lines, THEN THE README_Cleaner SHALL leave them unchanged, so `a\n\n\nb` stays and `a\n\n\n\nb` becomes `a\n\nb`.
+9. WHEN the text contains 2 or more consecutive Blank_Lines, THEN THE README_Cleaner SHALL replace them with exactly 1 Blank_Line.
+10. WHEN the text contains exactly 1 Blank_Line between two lines, THEN THE README_Cleaner SHALL leave it unchanged, so `a\n\nb` stays and `a\n\n\nb` becomes `a\n\nb`.
 11. WHEN the text contains no markup, THEN THE README_Cleaner SHALL return the text unchanged apart from line-ending normalisation, trailing-whitespace removal and trimming.
 
 ### Requirement 2: Plain-text output and safety
@@ -73,7 +73,7 @@ Assumptions:
 1. THE Exhume SHALL provide Vitest example tests in `tests/readmeClean.test.ts` and SHALL provide no property-based test for the README_Cleaner.
 2. THE tests SHALL cover: `<img src="x.png" alt="logo">` removed; `<p align="center">Hi</p>` giving `Hi`; `<br>` and `<br/>`; a multi-line tag with attributes; a single-line and a multi-line HTML comment; `![alt](url)` removed; `[![Build](https://img.shields.io/x.svg)](https://ci.example)` removed entirely; two adjacent badges on one line leaving an empty line that is collapsed; `[text](url)` giving `text`; `[text](url "title")` giving `text`; `[](url)` leaving nothing; `[<b>x</b>](u)` giving `x`.
 3. THE tests SHALL cover: `# Title`, `## Sub`, `###### Six` and a heading indented by 3 spaces losing their markers; `#hashtag`, `#!/bin/sh` and `####### seven` unchanged; `<https://example.com>` and `a < b > c` unchanged.
-4. THE tests SHALL cover: 2 blank lines unchanged; 3 and 5 blank lines becoming 1; CRLF input normalised; whitespace-only lines collapsed by the blank-line rule; leading and trailing whitespace trimmed; an input of only badges and tags giving `''`; plain and code-like text without markup unchanged; two calls with the same input giving equal output.
+4. THE tests SHALL cover: 1 blank line unchanged; 2, 3 and 5 blank lines becoming 1; CRLF input normalised; whitespace-only lines collapsed by the blank-line rule; leading and trailing whitespace trimmed; an input of only badges and tags giving `''`; plain and code-like text without markup unchanged; two calls with the same input giving equal output.
 5. THE tests SHALL include one realistic sample README (badges, centred HTML logo, headings, links, a code fence) cleaned to an exact expected string.
 6. THE tests SHALL include pathological inputs (100000 repetitions of `[`, 100000 characters of `<a ` repeated, and 50000 `!` followed by `[`) that return a string within 1000 ms measured with `performance.now()`.
 7. THE Exhume SHALL append new tests to `tests/App.test.tsx` covering: a README full of badges, HTML and links shown cleaned in the README_Panel with the same text as the 4th argument of `runAutopsy`; a badges-only README showing the Missing_Readme_Line with the report still shown; a README over 6000 characters raw and under 6000 cleaned shown without truncation and sent with `truncated` false; the README cache reused for the same repository with different letter case (one `fetchReadme` call).

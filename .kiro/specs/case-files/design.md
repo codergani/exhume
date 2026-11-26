@@ -31,7 +31,7 @@ Fictional data must not produce misleading links. The placeholder is therefore:
 - `causeOfDeath` says what to watch (the existing rule for ALIVE). Three steps, each citing a concrete value. An overview. A short README excerpt written for the sample.
 - No "exhume" in owner or repo. No claim about any real repository.
 
-**Open question 1 (README link).** ReadmePanel always renders the link built by `buildReadmeUrl(owner, repo)`, which for the placeholder is `https://github.com/lanternworks/lantern#readme`. That page may return 404 or belong to a stranger. The checkpoint asks the user to open `https://github.com/lanternworks/lantern` once and confirm it does not exist, or to pick other names.
+**Decision (README link).** For a saved sample the README panel shows no GitHub link: it shows the plain text "saved excerpt" in its place (user decision). This removes the risk of a fictional name pointing at a stranger's repository. `ReadmePanel` gains an optional `savedExcerpt?: boolean` prop (default `false`); when true it renders `<p className="readme-note">saved excerpt</p>` instead of the link, and its truncation note reads `[cut at 6000 characters.]` without pointing to the original README. Live analyses are unchanged.
 
 **Open question 2 (own repository).** The user's own repository `codergani/exhume` would break the accessible-name rule (see Constraints), because its button text would contain "exhume". The own-repository case must use another repository, or the user must accept a different accessible-name format. This is not needed in phase 1.
 
@@ -49,9 +49,10 @@ Fictional data must not produce misleading links. The placeholder is therefore:
 | `src/ui/CaseFileList.tsx` | create | The "Saved case files" list |
 | `src/ui/SampleLabel.tsx` | create | The "saved sample" note |
 | `src/ui/theme.css` | modify | Append rules for `.cases` and `.sample-label`; no existing rule changes |
-| `src/App.tsx` | modify | `sample` state, `handleOpenCase`, render the list in IDLE and the label above VitalsPanel |
+| `src/ui/ReadmePanel.tsx` | modify | Optional `savedExcerpt` prop: shows "saved excerpt" instead of the link; default behaviour unchanged |
+| `src/App.tsx` | modify | `sample` state, `handleOpenCase`, render the list in IDLE and the label above VitalsPanel, pass `savedExcerpt` to ReadmePanel while a sample is shown |
 
-Untouched: `src/appState.ts`, `src/ai/*`, `src/github/*`, `src/lib/*` other than the new file, `VitalsPanel`, `ForksPanel`, `ReadmePanel`, `TerminalOutput`, `lines.ts`, all existing tests (tests are only appended to `tests/App.test.tsx`).
+Untouched: `src/appState.ts`, `src/ai/*`, `src/github/*`, `src/lib/*` other than the new file, `VitalsPanel`, `ForksPanel`, `TerminalOutput`, `lines.ts`, all existing tests (tests are only appended to `tests/App.test.tsx` and `tests/ReadmePanel.test.tsx`).
 
 ### Requirement-to-component map
 
@@ -175,7 +176,7 @@ The exact values below are the file content (strings shown as written; the file 
 - `vitals`: `{ "lastPushDate": "2024-11-15T09:30:00Z", "archived": false, "openIssueCount": 4, "starCount": 128, "monthsSinceLastPush": 7 }`
 - `forks`: `{ "status": "skipped" }`
 - `readme`: `{ "truncated": false, "text": "lantern\n\nA small command-line tool that watches a folder and prints a line each time a file changes.\n\nUsage\n  lantern watch ./notes\n\nOptions\n  --quiet   print only the file name\n  --once    exit after the first change\n\nThis is a fictional sample written for the saved case files." }`
-- `report.causeOfDeath`: `Not dead. The last push was 7 months ago and 4 issues are still open. Watch for a push within 12 months, or this repository will be classed DYING.`
+- `report.causeOfDeath`: `Still breathing. The last push was 7 months ago and 4 issues are still open. Watch for a push within 12 months, or this repository will be classed DYING.`
 - `report.severity`: `stable`
 - `report.steps` (3, each with a concrete value; `order` 1 to 3, shown below as `action`: `rationale`):
   1. `Triage the 4 open issues`: `Read all 4 open issues and label each as bug, question or request. Close the ones that are answered.`
@@ -250,7 +251,7 @@ function handleOpenCase(c: CaseFile) {
   setInputError(null)                    // use the existing input-error setter
   setRestingToday(false)
   setForkResult(c.forks)
-  setReadmeResult({ status: 'available', text: c.readme.text, truncated: c.readme.truncated, url: buildReadmeUrl(c.owner, c.repo) })
+  setReadmeResult({ status: 'available', text: c.readme.text, truncated: c.readme.truncated, url: '' }) // url unused: ReadmePanel gets savedExcerpt
   setSample({ capturedAt: c.capturedAt, kind: c.source.kind })
   setState({ stage: 'RESULTS', vitals: c.vitals, depRot: SKIPPED_DEP_ROT, report: c.report })
 }
@@ -259,7 +260,7 @@ function handleOpenCase(c: CaseFile) {
 - `handleOpenCase` never calls `fetchRepoVitals`, `fetchForks`, `fetchReadme`, `runAutopsy` or Firebase, and never reads or writes `vitalsCache`, `forksCache` or `readmeCache`. A later real analysis of the same `owner/repo` therefore fetches live data (Requirement 4.11).
 - `handleSubmit` and `handleReset` call `setSample(null)` (Requirements 4.12, 5.5).
 - Render: `<CaseFileList cases={savedCases} onOpen={handleOpenCase} />` only in IDLE, directly after the URL form and its input error. `<SampleLabel ... />` renders when `sample` is non-null, directly above VitalsPanel.
-- The sample shows through the existing report `TerminalOutput` (typewriter, reduced motion respected), VitalsPanel (status from `classifyStatus`, label from `statusLabel`), ForksPanel and ReadmePanel (link from `buildReadmeUrl`, `target="_blank"`, `rel="noopener noreferrer"`).
+- The sample shows through the existing report `TerminalOutput` (typewriter, reduced motion respected), VitalsPanel (status from `classifyStatus`, label from `statusLabel`), ForksPanel and ReadmePanel (rendered with `savedExcerpt={sample !== null}`, so a sample shows "saved excerpt" and no GitHub link).
 - No new AppState stage and no changed transition. A sample cannot reach ERROR_GITHUB, ERROR_AI or FALLBACK, because no async work runs.
 - The report is passed as is. `CaseReport` is structurally the `AutopsyReport` type; if the compiler needs it, the implementer adds a narrow type assertion at the single call site.
 

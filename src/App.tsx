@@ -13,6 +13,7 @@ import type { ForkResult } from './lib/forks'
 import { fetchReadme } from './github/readme'
 import { buildReadmeExcerpt, buildReadmePayload, buildReadmeUrl } from './lib/readme'
 import type { ReadmeResult } from './lib/readme'
+import { cleanReadmeText } from './lib/readmeClean'
 import { runAutopsy } from './ai/provider'
 import { buildFallbackReport } from './ai/fallback'
 import { AutopsyAiError, AutopsySchemaError, GitHubRateLimitError } from './errors'
@@ -20,6 +21,10 @@ import { TerminalOutput } from './ui/TerminalOutput'
 import { VitalsPanel } from './ui/VitalsPanel'
 import { ForksPanel } from './ui/ForksPanel'
 import { ReadmePanel } from './ui/ReadmePanel'
+import { CaseFileList } from './ui/CaseFileList'
+import { SampleLabel } from './ui/SampleLabel'
+import { savedCases } from './cases'
+import type { CaseFile } from './lib/caseFile'
 import { ErrorBanner } from './ui/ErrorBanner'
 import { progressLines, reportHeadings, reportLines } from './ui/lines'
 import { prefersReducedMotion } from './ui/motion'
@@ -89,7 +94,7 @@ async function findReadme(owner: string, repo: string): Promise<ReadmeResult> {
   try {
     const text = await fetchReadme(owner, repo)
     if (text === null) return { status: 'unavailable', message: README_MISSING_MESSAGE }
-    const ex = buildReadmeExcerpt(text)
+    const ex = buildReadmeExcerpt(cleanReadmeText(text))
     if (ex.empty) return { status: 'unavailable', message: README_MISSING_MESSAGE }
     return { status: 'available', text: ex.text, truncated: ex.truncated, url: buildReadmeUrl(owner, repo) }
   } catch (err) {
@@ -128,6 +133,8 @@ function App() {
   // True when the FALLBACK report is shown because the AI's daily quota is used up.
   const [restingToday, setRestingToday] = useState(false)
   const readmeCache = useRef(new Map<string, ReadmeResult>())
+  // Set while a saved case file is shown; null for live analyses.
+  const [sample, setSample] = useState<{ capturedAt: string; kind: 'fictional' | 'captured' } | null>(null)
 
   async function consult(
     vitals: RepoVitals,
@@ -160,6 +167,7 @@ function App() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (state.stage !== 'IDLE') return
+    setSample(null)
 
     const parsed = parseRepoUrl(url)
     if (!parsed) {
@@ -215,8 +223,20 @@ function App() {
     void consult(vitals, depRot, forkResult, readmeResult, () => runRef.current === runId)
   }
 
+  /** Opens a frozen case file straight into RESULTS. No network, AI or cache access. */
+  function handleOpenCase(c: CaseFile) {
+    runRef.current++
+    setInputError(null)
+    setRestingToday(false)
+    setForkResult(c.forks)
+    setReadmeResult({ status: 'available', text: c.readme.text, truncated: c.readme.truncated, url: '' })
+    setSample({ capturedAt: c.capturedAt, kind: c.source.kind })
+    setState({ stage: 'RESULTS', vitals: c.vitals, depRot: SKIPPED_DEP_ROT, report: c.report })
+  }
+
   function handleReset() {
     runRef.current++
+    setSample(null)
     setInputError(null)
     setForkResult(null)
     setReadmeResult(null)
@@ -254,10 +274,13 @@ function App() {
           {inputError}
         </p>
       )}
+      {state.stage === 'IDLE' && <CaseFileList cases={savedCases} onOpen={handleOpenCase} />}
 
-      {lines.length > 0 && (
+      {lines.length > 0 && !sample && (
         <TerminalOutput lines={lines} typewriterActive={false} label="Progress" />
       )}
+
+      {sample && <SampleLabel capturedAt={sample.capturedAt} kind={sample.kind} />}
 
       {vitals && <VitalsPanel vitals={vitals} status={classifyStatus(vitals)} />}
 
@@ -304,7 +327,7 @@ function App() {
         </p>
       )}
 
-      {readmeResult && finished && <ReadmePanel result={readmeResult} />}
+      {readmeResult && finished && <ReadmePanel result={readmeResult} savedExcerpt={sample !== null} />}
 
       {finished && (
         <div className="actions">

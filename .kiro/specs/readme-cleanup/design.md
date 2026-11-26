@@ -6,7 +6,7 @@ This design adds one pure function, `cleanReadmeText`, that removes badges, HTML
 
 The change is one new file in `src/lib`, one new import and one changed line in `src/App.tsx`, one new test file, and appended tests plus one changed assertion in `tests/App.test.tsx`. `buildReadmeExcerpt`, `ReadmeResult`, `ReadmePayload`, the panel, the provider, the schema, `AppState`, the caches, AI Retry and the fallback are untouched. No new dependencies, no backend, no accounts.
 
-**Open question for the project owner:** "collapse 3+ blank lines to 1" is read as 3 or more consecutive empty lines (4 or more newlines). Two blank lines (`a\n\n\nb`) are left alone; three (`a\n\n\n\nb`) become one (`a\n\nb`). The alternative reading, "2 or more", would change the pattern `\n{4,}` to `\n{3,}`.
+**Decision (project owner):** 2 or more consecutive blank lines become exactly 1. `a\n\n\nb` (2 blank lines) becomes `a\n\nb`; `a\n\nb` (1 blank line) is unchanged.
 
 ---
 
@@ -74,7 +74,7 @@ Rules, applied in exactly this order:
 | 6 | Remove HTML tags | `/<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/g` replaced by `''` |
 | 7 | Strip leading heading markers | `/^[ \t]{0,3}#{1,6}[ \t]+/gm` replaced by `''` |
 | 8 | Trim trailing whitespace on every line | `s.split('\n').map((l) => l.trimEnd()).join('\n')`, so whitespace-only lines become empty |
-| 9 | Collapse 3 or more blank lines to 1 | `/\n{4,}/g` replaced by `'\n\n'` |
+| 9 | Collapse 2 or more blank lines to 1 | `/\n{3,}/g` replaced by `'\n\n'` |
 | 10 | Trim the whole text | `s.trim()` |
 
 Design notes:
@@ -84,7 +84,7 @@ Design notes:
 - **Rule 8 uses `trimEnd` per line,** because `/[ \t]+$/gm` is quadratic on a long run of spaces that is not at a line end.
 - **Rule 6 text handling:** only the tag is removed. Text inside `<b>..</b>` or `<script>..</script>` stays as plain text; it is never rendered or executed. Because the tag name must start with a letter and be followed by whitespace, `/` or `>`, `<https://example.com>` (the name `https` is followed by `:`, not whitespace, `/` or `>`) and `a < b > c` (a space follows `<`, not a letter) are left alone.
 - **Rule 7 only strips** when the `#` run (1 to 6) is followed by a space or tab. `#hashtag`, `#!/bin/sh` and `####### seven` (7 hashes: the run `#{1,6}` is followed by `#`, not a space, so no match) are unchanged.
-- **Rule 9 examples:** `a\n\n\nb` (2 blank lines) is unchanged; `a\n\n\n\nb` (3 blank lines) becomes `a\n\nb`; 5 blank lines become 1. Rule 8 runs first, so lines of only spaces count as blank.
+- **Rule 9 examples:** `a\n\nb` (1 blank line) is unchanged; `a\n\n\nb` (2 blank lines) becomes `a\n\nb`; 3 and 5 blank lines also become 1. Rule 8 runs first, so lines of only spaces count as blank.
 - **Rule order consequences:** `[<b>x</b>](u)` becomes `<b>x</b>` in rule 5 and `x` in rule 6. Two adjacent badges on one line become an empty line (rule 3), which rules 8 and 9 tidy. A README of only badges and tags becomes `''`.
 
 Examples:
@@ -184,7 +184,7 @@ Example tests only (Vitest). No property-based tests, no new dependencies. Becau
 - Links: `[text](url)` gives `text`; `[text](url "title")` gives `text`; `[](url)` leaves nothing; `[<b>x</b>](u)` gives `x`.
 - Headings: `# Title`, `## Sub`, `###### Six` and a heading indented by 3 spaces lose their markers; `#hashtag`, `#!/bin/sh` and `####### seven` are unchanged.
 - Non-matches: `<https://example.com>` and `a < b > c` unchanged.
-- Blank lines: 2 blank lines unchanged; 3 and 5 blank lines become 1; CRLF input normalised; whitespace-only lines collapsed by the blank-line rule; leading and trailing whitespace trimmed.
+- Blank lines: 1 blank line unchanged; 2, 3 and 5 blank lines become 1; CRLF input normalised; whitespace-only lines collapsed by the blank-line rule; leading and trailing whitespace trimmed.
 - Totals: an input of only badges and tags gives `''`; plain and code-like text without markup is unchanged; two calls with the same input give equal output.
 - One realistic sample README (badges, centred HTML logo, headings, links, a code fence) cleaned to an exact expected string.
 - Pathological inputs: `'['.repeat(100000)`, `'<a '.repeat(100000)`, `'!'.repeat(50000) + '['`, `'<!--'.repeat(50000)` and `' '.repeat(100000) + 'x'` each return a string in under 1000 ms, measured with `performance.now()`.

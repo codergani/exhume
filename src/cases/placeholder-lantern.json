@@ -1,0 +1,50 @@
+{
+  "id": "placeholder-lantern",
+  "owner": "lanternworks",
+  "repo": "lantern",
+  "capturedAt": "2025-06-15T12:00:00Z",
+  "license": "Apache-2.0",
+  "source": { "kind": "fictional", "readmeOrigin": "written-for-sample" },
+  "vitals": {
+    "lastPushDate": "2024-11-15T09:30:00Z",
+    "archived": false,
+    "openIssueCount": 4,
+    "starCount": 128,
+    "monthsSinceLastPush": 7
+  },
+  "forks": { "status": "skipped" },
+  "readme": {
+    "truncated": false,
+    "text": "lantern\n\nA small command-line tool that watches a folder and prints a line each time a file changes.\n\nUsage\n  lantern watch ./notes\n\nOptions\n  --quiet   print only the file name\n  --once    exit after the first change\n\nThis is a fictional sample written for the saved case files."
+  },
+  "report": {
+    "causeOfDeath": "Still breathing. The last push was 7 months ago and 4 issues are still open. Watch for a push within 12 months, or this repository will be classed DYING.",
+    "severity": "stable",
+    "steps": [
+      {
+        "order": 1,
+        "action": "Triage the 4 open issues",
+        "rationale": "Read all 4 open issues and label each as bug, question or request. Close the ones that are answered."
+      },
+      {
+        "order": 2,
+        "action": "Cut one small release",
+        "rationale": "The last push was on 2024-11-15. Publish one patch release so the 7-month gap ends."
+      },
+      {
+        "order": 3,
+        "action": "Set a review date",
+        "rationale": "Add a note to check this repository again before 12 months pass, which is the DYING threshold."
+      }
+    ],
+    "generatedAt": "2025-06-15T12:00:05Z",
+    "overview": {
+      "purpose": "Watches a folder and prints a line each time a file changes.",
+      "audience": "Developers who want a quick change log of a local folder.",
+      "quickStart": [
+        "Run lantern watch ./notes in a terminal.",
+        "Edit a file in that folder and read the printed line."
+      ]
+    }
+  }
+}
